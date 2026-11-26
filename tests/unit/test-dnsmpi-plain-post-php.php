@@ -315,6 +315,37 @@ namespace {
 	check( $r && false === strpos( $r->html, '<form' ) && false === strpos( $r->html, 'nonce-' ), 'which hands out no form and no nonce' );
 	check( $r && false !== strpos( $r->html, '<a href="https://example.test/">' ) && false === strpos( $r->html, 'evil.test' ), 'and whose link goes home, never to the foreign referrer' );
 
+	// A link or an auto-submitting form on another site that opens the handler
+	// with NO valid nonce. The nonce used to be judged before the origin, so
+	// this came back as "expired token" and the page printed the retry form
+	// with a freshly minted nonce: a genuine page of this site, one click away
+	// from clearing the visitor's opt-out (or planting one).
+	echo "\n== A cross-site navigation without a nonce is handed no retry form ==\n";
+	$cross = array( 'HTTP_SEC_FETCH_SITE' => 'cross-site', 'HTTP_REFERER' => 'https://evil.test/x' );
+	foreach ( array(
+		'handle_rescind' => array( 'faz_dnsmpi_rescind', true ),
+		'handle_optout'  => array( 'faz_dnsmpi_optout', false ),
+	) as $method => $case ) {
+		$GLOBALS['faz_test_cookies'] = array();
+		$rows                        = count( Controller::$rows );
+		$r                           = faz_post( $handler, $method, array( 'action' => $case[0] ), true, $cross, $case[1] );
+		$html                        = $r ? $r->html : '';
+		check( $r && 'page' === $r->kind && 403 === $r->status, "$method: answered with a 403 page (got " . ( $r ? $r->status : 'nothing' ) . ')' );
+		check( false === strpos( $html, '<form' ) && false === strpos( $html, 'nonce-' ), "$method: with no form and no fresh nonce" );
+		check( false !== strpos( $html, 'must originate from this website' ), "$method: that says the request did not come from this site" );
+		check( false !== strpos( $html, '<a href="https://example.test/">' ) && false === strpos( $html, 'evil.test' ), "$method: and only the link back to the site" );
+		check( array() === $GLOBALS['faz_test_cookies'] && $rows === count( Controller::$rows ), "$method: nothing is changed" );
+	}
+	// The same with a wrong nonce, and through the script's endpoint: the
+	// origin is what is reported, so nothing invites a retry.
+	$r = faz_post( $handler, 'handle_rescind', array( 'action' => 'faz_dnsmpi_rescind', 'nonce' => 'guess' ), true, $cross, true );
+	check( $r && 403 === $r->status && false === strpos( $r->html, '<form' ), 'a wrong nonce from another site: still no form' );
+	$r = faz_post( $handler, 'handle_rescind', array( 'action' => 'faz_dnsmpi_rescind' ), false, $cross, true );
+	check( $r && 'json' === $r->kind && false === $r->success && is_string( $r->data ), 'the JSON answer to a cross-site request never carries the stale_nonce retry code' );
+	// A same-origin visitor with an expired nonce keeps the retry form.
+	$r = faz_post( $handler, 'handle_rescind', array( 'action' => 'faz_dnsmpi_rescind', 'nonce' => 'expired' ), true, array(), true );
+	check( $r && 200 === $r->status && false !== strpos( $r->html, 'name="nonce" value="nonce-faz_dnsmpi_rescind"' ), 'a same-origin withdrawal with an expired nonce still gets the retry form' );
+
 	echo "\n== The script's contract is untouched ==\n";
 	$GLOBALS['faz_test_cookies'] = array();
 	$r                           = faz_post( $handler, 'handle_optout', $optout, false );

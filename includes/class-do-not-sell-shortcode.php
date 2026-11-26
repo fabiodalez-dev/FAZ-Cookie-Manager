@@ -421,7 +421,12 @@ class Do_Not_Sell_Shortcode {
 	private function respond_with_page( array $result, $action ) {
 		$data    = $result['data'];
 		$message = is_array( $data ) ? ( isset( $data['message'] ) ? (string) $data['message'] : '' ) : (string) $data;
-		$stale   = is_array( $data ) && isset( $data['code'] ) && 'stale_nonce' === $data['code'];
+		// The retry form carries a nonce minted for this response, so it is
+		// only ever printed for a request that came from this site. The
+		// handlers already refuse a foreign one before they look at the nonce;
+		// checking again here keeps that true whatever order a later handler
+		// uses, and a foreign request then gets the 403 and the link back.
+		$stale   = is_array( $data ) && isset( $data['code'] ) && 'stale_nonce' === $data['code'] && $this->is_same_origin_request();
 
 		// wp_get_referer() only returns a URL on this site (or one of its
 		// allowed redirect hosts), and prefers the _wp_http_referer field
@@ -515,7 +520,7 @@ class Do_Not_Sell_Shortcode {
 	/**
 	 * Apply an opt-out and say how it went.
 	 *
-	 * Once the nonce and the origin are accepted the opt-out is ALWAYS
+	 * Once the origin and the nonce are accepted the opt-out is ALWAYS
 	 * honoured: the cookie is set and the answer is a success. The right to
 	 * opt out (Cal. Civ. Code 1798.120, 1798.135; CCPA Regulations 7026) is
 	 * not something a throttle may refuse. Through 1.40.0 a second opt-out from
@@ -530,21 +535,27 @@ class Do_Not_Sell_Shortcode {
 	 *               wp_send_json_error() is to carry.
 	 */
 	private function process_optout() {
-		if ( ! check_ajax_referer( self::AJAX_ACTION, 'nonce', false ) ) {
-			return $this->stale_nonce_result();
-		}
-
 		// The nopriv nonce is identical for every anonymous visitor and is
 		// rendered into the public shortcode page, so on its own it is spam
 		// hardening, not a CSRF control: an attacker can scrape it and replay it
 		// from a cross-site page to forge an opt-out audit record and plant the
 		// long-lived opt-out cookie in a victim's browser. Require the request to
 		// be same-origin before performing the state change.
+		//
+		// Judged BEFORE the nonce. A failed nonce is answered as "expired",
+		// which invites a retry: the script fetches a fresh one, and
+		// respond_with_page() prints the request again with one. Checked the
+		// other way round, a cross-site navigation carrying no nonce at all
+		// was handed that retry form on a genuine page of this site.
 		if ( ! $this->is_same_origin_request() ) {
 			return array(
 				'success' => false,
 				'data'    => __( 'This request must originate from this website.', 'faz-cookie-manager' ),
 			);
+		}
+
+		if ( ! check_ajax_referer( self::AJAX_ACTION, 'nonce', false ) ) {
+			return $this->stale_nonce_result();
 		}
 
 		// Idempotency: if the browser already carries the opt-out cookie, skip
@@ -608,23 +619,26 @@ class Do_Not_Sell_Shortcode {
 	/**
 	 * Withdraw an opt-out and say how it went.
 	 *
-	 * Like the opt-out, the withdrawal is always applied once the nonce and
-	 * the origin are accepted; the windows bound its audit row only.
+	 * Like the opt-out, the withdrawal is always applied once the origin and
+	 * the nonce are accepted; the windows bound its audit row only.
 	 *
 	 * @return array{success:bool,data:mixed}
 	 */
 	private function process_rescind() {
-		if ( ! check_ajax_referer( self::RESCIND_ACTION, 'nonce', false ) ) {
-			return $this->stale_nonce_result();
-		}
-
 		// Same CSRF hardening as process_optout(): the anonymous nonce is shared,
 		// so require a same-origin request before forging an opt-back-in record.
+		// Before the nonce, for the reason given there: a cross-site link to
+		// this handler without a nonce used to land the visitor on a page with
+		// a working "Withdraw opt-out" button, one click from clearing it.
 		if ( ! $this->is_same_origin_request() ) {
 			return array(
 				'success' => false,
 				'data'    => __( 'This request must originate from this website.', 'faz-cookie-manager' ),
 			);
+		}
+
+		if ( ! check_ajax_referer( self::RESCIND_ACTION, 'nonce', false ) ) {
+			return $this->stale_nonce_result();
 		}
 
 		// Idempotency: if the opt-out cookie is already absent, nothing to log.

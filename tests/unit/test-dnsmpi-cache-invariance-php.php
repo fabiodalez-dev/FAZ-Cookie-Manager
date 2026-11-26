@@ -135,6 +135,13 @@ namespace {
 		return empty( $GLOBALS['__faz_multisite'] ) ? $name : $name . '-n1-b2';
 	}
 
+	// The handlers judge the origin before the nonce (a foreign request must
+	// never be told "expired, try again"). The posts replayed here are the
+	// site's own visitor on a cached page, so the origin is the site's.
+	function faz_is_same_origin_request() {
+		return true;
+	}
+
 	require_once dirname( __DIR__, 2 ) . '/includes/class-ip-hasher.php';
 	require_once dirname( __DIR__, 2 ) . '/includes/class-do-not-sell-shortcode.php';
 
