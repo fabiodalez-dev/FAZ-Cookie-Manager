@@ -3939,8 +3939,10 @@ class Frontend {
 		}
 		// Admin-declared cookies as services (#360): keeps their svc.<id> token
 		// alive in get_service_consent() and lets the shredder honour a per-
-		// service denial by name. Their pattern list is empty, so the output
-		// buffer never blocks a script on their account.
+		// service denial by name. A row that names the script setting its cookie
+		// (url_pattern) brings that pattern along, so get_pattern_service_map()
+		// and the client's _providersToBlock hold the script on a per-service
+		// "no" as well; a row without one is enforced by name only.
 		$known_ids = array_flip( array_column( $services, 'id' ) );
 		foreach ( $this->get_declared_cookie_services( $valid_categories ) as $declared ) {
 			if ( isset( $known_ids[ $declared['id'] ] ) ) {
@@ -3970,8 +3972,16 @@ class Frontend {
 	 * operator who declared a booking widget's cookie could not ask the runtime
 	 * whether that specific widget was accepted. Each such row becomes a
 	 * synthetic service keyed by Cookie::get_service_id(), carrying the cookie
-	 * name for the shredder and NO URL patterns, so the output buffer keeps
-	 * judging scripts by category exactly as before.
+	 * name for the shredder and the row's url_pattern as its script pattern.
+	 *
+	 * The pattern is what makes the toggle a refusal the plugin honours: the
+	 * category map already blocks that script while the category is denied
+	 * (get_provider_category_map(), source 1), so a visitor who keeps the
+	 * category and switches this cookie off must get the same block. Shipped
+	 * without patterns, as it first was, the "no" deleted the cookie and left
+	 * the script that sets it running. A row with no url_pattern names no
+	 * script — the plugin blocks none for it at category level either — and is
+	 * enforced by name (shredder) and through its own opt-in script.
 	 *
 	 * Which rows qualify, and under which key, is decided once in
 	 * Cookie_Controller::get_declared_service_map() — pure function of the
@@ -4012,7 +4022,9 @@ class Frontend {
 				'id'          => $service['id'],
 				'label'       => $service['label'],
 				'category'    => $service['category'],
-				'patterns'    => array(),
+				'patterns'    => isset( $service['patterns'] ) && is_array( $service['patterns'] )
+					? array_values( array_filter( array_map( 'sanitize_text_field', $service['patterns'] ) ) )
+					: array(),
 				'cookies'     => $service['cookies'],
 				'third_party' => false,
 				'declared'    => true,

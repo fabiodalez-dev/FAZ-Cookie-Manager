@@ -1206,6 +1206,11 @@
 			// under, so the admin can see it without guessing (#360). Not posted.
 			{ label: fazI18n('cookies.serviceIdLabel', 'Service ID (read-only)'), path: 'service_id', type: 'text', readonly: true, placeholder: fazI18n('cookies.serviceIdPending', 'Assigned from the cookie name when you save'), help: fazI18n('cookies.serviceIdHelp', 'Query this key in window.getFazConsent().services to learn whether the visitor has accepted this cookie.') },
 			{ label: fazI18n('cookies.domainLabel', 'Domain'), path: 'domain', type: 'text' },
+			// The script that sets this cookie. It was reachable only through the
+			// REST API, so a hand-declared cookie's per-service toggle had nothing
+			// to block: switching it off deleted the cookie and left the script
+			// running. Naming the script here is what lets the blocker hold it.
+			{ label: fazI18n('cookies.urlPatternLabel', 'Script URL pattern'), path: 'url_pattern', type: 'text', placeholder: fazI18n('cookies.urlPatternPlaceholder', 'e.g. widget.provider.example/loader.js'), help: fazI18n('cookies.urlPatternHelp', 'Part of the URL of the script (or iframe) that sets this cookie. Anything matching it is blocked until the cookie\'s category is accepted and, with per-service consent on, for as long as the visitor keeps this cookie\'s own toggle off. Leave it empty and that toggle only deletes the cookie and holds back the opt-in script below: the script that sets the cookie keeps loading unless your own code checks window.getFazConsent().services first.') },
 			{ label: fazI18n('cookies.durationLabel', 'Duration'), path: 'duration', type: 'text', placeholder: fazI18n('cookies.durationPlaceholder', 'e.g. 1 year') },
 			{ label: fazI18n('cookies.descriptionLabel', 'Description'), path: 'description', type: 'textarea' },
 			{ label: fazI18n('cookies.policyUrlLabel', 'Provider privacy policy URL'), path: 'policy_url', type: 'url', placeholder: fazI18n('cookies.policyUrlPlaceholder', 'https://provider.example/privacy'), help: fazI18n('cookies.policyUrlHelp', 'Shown as a link under the cookie in the banner and in the cookie policy, so visitors can read the provider\'s policy before deciding.') },
@@ -1215,7 +1220,10 @@
 		// the field with "assigned when you save" would promise a key that
 		// getFazConsent().services never answers (#365 review).
 		if (isEdit && !cookie.service_id) {
-			fields = fields.filter(function (f) { return f.path !== 'service_id'; });
+			// The pattern field goes with it: its help text describes a toggle
+			// these rows do not have. A pattern such a row already holds is not
+			// posted, so the server keeps it as it is.
+			fields = fields.filter(function (f) { return f.path !== 'service_id' && f.path !== 'url_pattern'; });
 		}
 
 		// Only expose opt-in/opt-out script fields to users with the

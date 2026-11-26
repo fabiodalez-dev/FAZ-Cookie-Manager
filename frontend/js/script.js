@@ -8530,6 +8530,25 @@ function _fazGetPatternServiceMap() {
     return _fazPatternServiceMap;
 }
 
+/**
+ * Hand-declared services (#360) that name `pattern` as the script setting
+ * their cookie. Read from _services, where the server lists them with
+ * `declared: true` and the row's url_pattern in `patterns`.
+ *
+ * @param {string} pattern A _providersToBlock `re` value.
+ * @return {string[]} Service ids, empty when no declared service owns it.
+ */
+function _fazGetDeclaredPatternOwners(pattern) {
+    if (!pattern) return [];
+    var owners = _fazGetPatternServiceMap()[pattern];
+    if (!owners || !owners.length || !Array.isArray(_fazStore._services)) return [];
+    return owners.filter(function (id) {
+        return _fazStore._services.some(function (svc) {
+            return svc && svc.id === id && svc.declared === true;
+        });
+    });
+}
+
 /*
  * Per-URL memo for _fazMatchingProviders(). The same URL is checked over and
  * over on a single page — a review widget re-assigning one star icon sent it
@@ -8608,6 +8627,14 @@ function _fazGetServiceConsentForTarget(formattedRE) {
         // to its svc.<id> instead of being re-blocked under the denied category.
         // Fall back to the scanner-detected pattern map otherwise. #134/#146.
         var serviceIds = providers[pi].service ? [providers[pi].service] : (psMap[providers[pi].re] || []);
+        // An entry carries ONE owner. When a hand-declared cookie (#360) names,
+        // as the script that sets it, a pattern a catalogue provider also owns,
+        // the entry points at the provider and the declared service would never
+        // be asked — while the server, which matches every owner of a pattern,
+        // holds the script on its "no". Ask the declared owners too, so both
+        // layers honour the same refusal.
+        var declaredIds = _fazGetDeclaredPatternOwners(providers[pi].re);
+        if (declaredIds.length) serviceIds = serviceIds.concat(declaredIds);
         for (var si = 0; si < serviceIds.length; si++) {
             var svcConsent = _fazRef._fazGetFromStore("svc." + serviceIds[si]);
             if (svcConsent === "no") return "no";
