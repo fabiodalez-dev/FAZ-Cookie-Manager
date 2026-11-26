@@ -1462,7 +1462,16 @@ class Controller {
 					continue;
 				}
 				foreach ( $cats as $cat => $value ) {
-					$cat = sanitize_text_field( $cat );
+					// The key is counted as stored. log_consent() validated it
+					// against the stored alphabet before writing it, and a
+					// per-cookie key keeps its percent-escapes on purpose (see
+					// encode_cookie_decision_key()). sanitize_text_field() here
+					// removed those octets, so the refusal of "a b" (a%20b) was
+					// added to the unrelated cookie "ab". The only consumers are
+					// the REST response (JSON) and the dashboard, which prints
+					// the key with textContent. The cast is for an all-digit
+					// key, which json_decode() hands back as an integer.
+					$cat = (string) $cat;
 					// Skip reserved audit-only keys (e.g. meta.age_affirmed): they
 					// ride the categories JSON for accountability but are NOT
 					// consent categories, so counting them would draw a phantom
@@ -1596,6 +1605,9 @@ class Controller {
 	 * of the column. The output is printable ASCII, at most three bytes per
 	 * input byte and capped like every other key, so the reasons for the drop
 	 * (row growth, a quote or backslash reaching the CSV export) still hold.
+	 * A key within the cap is stored whole; a longer one is shortened and ends
+	 * in `~` plus 16 hex digits of a digest of the whole encoded key, so two
+	 * long names never end up on the same key.
 	 *
 	 * It is done on this side on purpose. Escaping more in _fazCkKey() would
 	 * change the key of consent cookies already in visitors' browsers, and
@@ -1616,9 +1628,23 @@ class Controller {
 			},
 			(string) $key
 		);
-		$key = substr( (string) $key, 0, 190 );
-		// The cap may fall inside an escape; half of one is not a byte of the name.
-		return (string) preg_replace( '/%[0-9A-Fa-f]?$/', '', $key );
+		$key = (string) $key;
+		if ( strlen( $key ) <= 190 ) {
+			return $key;
+		}
+		// Too long to store whole. A plain cut is not enough: two names that
+		// differ only past the cut would share one key, and the later decision
+		// would overwrite the earlier one in the map — a "yes" over a refusal.
+		// Encoding makes that reachable with short names, since a 63-byte
+		// non-ASCII name is already 189 bytes. So a shortened key ends in a
+		// digest of the WHOLE encoded key: the start stays readable, and names
+		// that differ anywhere get different keys. `~` only marks where the
+		// digest begins; the same name always yields the same key, so rows of
+		// one cookie still aggregate together.
+		$digest = '~' . substr( hash( 'sha256', $key ), 0, 16 );
+		$head   = substr( $key, 0, 190 - strlen( $digest ) );
+		// The cut may fall inside an escape; half of one is not a byte of the name.
+		return preg_replace( '/%[0-9A-Fa-f]?$/', '', $head ) . $digest;
 	}
 
 	/**
