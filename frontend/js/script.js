@@ -8342,35 +8342,44 @@ function _fazUnblockServerSide() {
     // (_fazHoldUnreadStyleTail): no marker on the element, the original URL
     // still in the text behind _FAZ_HELD_CSS_URL. Same rule as 4b, and the
     // text goes back through the gated setter, which decides again.
-    if (_fazAggressiveCssUrlBlockingEnabled()) {
-        document.querySelectorAll('style')
-            .forEach(function (el) {
-                var live = el.textContent || "";
-                if (live.indexOf(_FAZ_HELD_CSS_URL) === -1) return;
-                var css = live.split(_FAZ_HELD_CSS_URL).join("");
-                if (_fazCssShouldBlock(css)) return;
-                el.textContent = css;
-            });
-        // The same hold in a style="…" attribute. The rest it was applied to
-        // was never tokenized, so _fazHoldCssUrlsInPlace() cannot tell a sheet
-        // from an attribute value and holds a blocked url() in both. That is
-        // kept: limiting the hold to the text between "<style" and "</style"
-        // would need the very reading the walk gave up on (in foreign content
-        // a CDATA section carries "</style" as text and the sheet goes on
-        // after it), and a URL left unheld only because of where it seemed to
-        // be is the leak the hold exists to close. What was missing is this
-        // half: an element kept "about:invalid#faz-held:" in its inline style
-        // after consent, until the next page load. Same rule as above, the
-        // declarations go back only when no URL in them is still blocked.
-        document.querySelectorAll('[style*="faz-held:"]')
-            .forEach(function (el) {
-                var live = el.getAttribute("style") || "";
-                if (live.indexOf(_FAZ_HELD_CSS_URL) === -1) return;
-                var css = live.split(_FAZ_HELD_CSS_URL).join("");
-                if (_fazCssShouldBlock(css)) return;
-                el.setAttribute("style", css);
-            });
-    }
+    //
+    // Not tied to the "Advanced inline CSS URL blocking" option, like 4b. The
+    // option decides whether THIS file gates markup strings; the bootstrap
+    // does not read it, and on its safety release (holdUnreadStyleTail() in
+    // bootstrap.js) it holds a cross-origin URL the same way on every site,
+    // because it has neither the rules nor a decision to do anything else
+    // with. A runtime that arrives after that release takes over (finish(),
+    // the `late` branch), and with the option off this pass used to be
+    // skipped: the held sheet stayed inert after the visitor accepted, until
+    // the next page load. Whoever wrote the marker, what it holds is given
+    // back by the rule below.
+    document.querySelectorAll('style')
+        .forEach(function (el) {
+            var live = el.textContent || "";
+            if (live.indexOf(_FAZ_HELD_CSS_URL) === -1) return;
+            var css = live.split(_FAZ_HELD_CSS_URL).join("");
+            if (_fazCssShouldBlock(css)) return;
+            el.textContent = css;
+        });
+    // The same hold in a style="…" attribute. The rest it was applied to
+    // was never tokenized, so _fazHoldCssUrlsInPlace() cannot tell a sheet
+    // from an attribute value and holds a blocked url() in both. That is
+    // kept: limiting the hold to the text between "<style" and "</style"
+    // would need the very reading the walk gave up on (in foreign content
+    // a CDATA section carries "</style" as text and the sheet goes on
+    // after it), and a URL left unheld only because of where it seemed to
+    // be is the leak the hold exists to close. What was missing is this
+    // half: an element kept "about:invalid#faz-held:" in its inline style
+    // after consent, until the next page load. Same rule as above, the
+    // declarations go back only when no URL in them is still blocked.
+    document.querySelectorAll('[style*="faz-held:"]')
+        .forEach(function (el) {
+            var live = el.getAttribute("style") || "";
+            if (live.indexOf(_FAZ_HELD_CSS_URL) === -1) return;
+            var css = live.split(_FAZ_HELD_CSS_URL).join("");
+            if (_fazCssShouldBlock(css)) return;
+            el.setAttribute("style", css);
+        });
 
     // 4c. Inline `style` ATTRIBUTES the server neutralised (process_style_attr_tag
     // in class-frontend.php): the original declarations live in data-faz-style

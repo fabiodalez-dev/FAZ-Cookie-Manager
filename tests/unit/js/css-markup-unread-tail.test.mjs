@@ -17,7 +17,8 @@
  *   - the hold only ever INSERTS inert characters, so it cannot turn
  *     sanitised markup into live markup (differential check against the
  *     parser alone);
- *   - consent hands the held sheet back;
+ *   - consent hands the held sheet back, also when the bootstrap wrote the
+ *     hold and the runtime that restores has the option off;
  *   - a tail with nothing to block, and a site with the option off, are
  *     untouched.
  *
@@ -288,6 +289,41 @@ console.log('\nruntime: the option off leaves markup alone');
 const released = await safetyRelease();
 ok('\nprecondition: the bootstrap safety release is active (runtime missing)', released.document.documentElement.className.indexOf('faz-consent-runtime-missing') !== -1);
 suite('bootstrap safety release', () => released, 'a.example');
+
+// The bootstrap does not read the "Advanced inline CSS URL blocking" option:
+// on its safety release it holds a cross-origin URL of an unread tail on every
+// site. A runtime that loads after the release (a delay-JS optimiser) takes
+// over, and its restore pass for the marker used to run only with the option
+// on — with the default, the sheet stayed inert after consent for the rest of
+// the page view. The markup the bootstrap really writes is carried into a
+// runtime with the option off, as it is in the document when that runtime
+// arrives.
+console.log('\nbootstrap hold, runtime with the option off: consent hands it back');
+{
+  const heldByBootstrap = write(released, SVG_CDATA
+    + '<style id="held">@import url(https://tracker.test/b.css);.x{color:red}</style>'
+    + '<div id="attr" style="background:url(https://tracker.test/x.png)">t</div>').innerHTML;
+  ok('precondition: the safety release held the sheet and the attribute in place',
+    heldByBootstrap.indexOf('@import url(' + HELD + 'https://tracker.test/b.css)') !== -1
+    && heldByBootstrap.indexOf('background:url(' + HELD + 'https://tracker.test/x.png)') !== -1);
+  const w = runtime({ aggressive: false });
+  const host = w.document.createElement('div');
+  w.document.body.appendChild(host);
+  host.innerHTML = heldByBootstrap;
+  const st = host.querySelector('#held');
+  const at = host.querySelector('#attr');
+  ok('precondition: the document the late runtime finds still carries the marker',
+    !!st && !!at && st.textContent.indexOf(HELD) !== -1 && at.getAttribute('style').indexOf(HELD) !== -1);
+  safe(() => w.eval('_fazUnblockServerSide()'));
+  ok('without consent the restore pass leaves both held (option off)',
+    st.textContent.indexOf(HELD) !== -1 && at.getAttribute('style').indexOf(HELD) !== -1);
+  w.fazcookie = w.fazcookie || {};
+  w.fazcookie._fazGetFromStore = (k) => ({ marketing: 'yes', necessary: 'yes' }[k]);
+  safe(() => w.eval('_fazUnblockServerSide()'));
+  ok('with consent the sheet is back as written (option off)', st.textContent === '@import url(https://tracker.test/b.css);.x{color:red}');
+  ok('with consent the style attribute is back as written (option off)', at.getAttribute('style') === 'background:url(https://tracker.test/x.png)');
+  ok('nothing in the document still carries the marker (option off)', w.document.documentElement.outerHTML.indexOf(HELD) === -1);
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
