@@ -8784,21 +8784,23 @@ function _fazGetServiceConsentForTarget(formattedRE) {
     var psMap = _fazGetPatternServiceMap();
     var hasExplicitYes = false;
     for (var pi = 0; pi < providers.length; pi++) {
-        // Prefer the service id carried on the matched _providersToBlock entry
-        // (present when per-service consent is on) so an embed of an
-        // enforceable-but-undetected provider — e.g. a clean server-allowed
-        // YouTube iframe after a reload, or a dynamically-injected one — resolves
-        // to its svc.<id> instead of being re-blocked under the denied category.
-        // Fall back to the scanner-detected pattern map otherwise. #134/#146.
-        var serviceIds = providers[pi].service ? [providers[pi].service] : (psMap[providers[pi].re] || []);
-        // An entry carries ONE owner. When a hand-declared cookie (#360) names,
-        // as the script that sets it, a pattern a catalogue provider also owns,
-        // the entry points at the provider and the declared service would never
-        // be asked — while the server, which matches every owner of a pattern,
-        // holds the script on its "no". Ask the declared owners too, so both
-        // layers honour the same refusal.
-        var declaredIds = _fazGetDeclaredPatternOwners(providers[pi].re);
-        if (declaredIds.length) serviceIds = serviceIds.concat(declaredIds);
+        // Ask EVERY owner of the matched pattern. The _providersToBlock entry
+        // carries one service id only (the first owner the server met), so
+        // reading it alone let that owner's "yes" release a script a second
+        // owner of the same pattern had refused — two services on one booking
+        // widget, or a hand-declared cookie (#360) naming a pattern a
+        // catalogue provider also owns — while the server, which matches every
+        // owner of a pattern (check_per_service_blocking()), held the script
+        // on that "no". The pattern map lists the owners the page knows about.
+        var serviceIds = (psMap[providers[pi].re] || []).slice();
+        // The entry's own id is added because it can name an
+        // enforceable-but-undetected provider that is in no _services row — a
+        // clean server-allowed YouTube iframe after a reload, or a
+        // dynamically-injected one — which must still resolve to its svc.<id>
+        // instead of being re-blocked under the denied category. #134/#146.
+        if (providers[pi].service && serviceIds.indexOf(providers[pi].service) === -1) {
+            serviceIds.push(providers[pi].service);
+        }
         for (var si = 0; si < serviceIds.length; si++) {
             var svcConsent = _fazRef._fazGetFromStore("svc." + serviceIds[si]);
             if (svcConsent === "no") return "no";
@@ -8806,6 +8808,55 @@ function _fazGetServiceConsentForTarget(formattedRE) {
         }
     }
     return hasExplicitYes ? "yes" : "";
+}
+
+/**
+ * Whether a hand-declared service (#360) that names `target` as the script
+ * setting its cookie was explicitly refused.
+ *
+ * Asked before an element's own data-faz-service grant is accepted. That grant
+ * answers for the ONE service the element is tagged with; a declared service
+ * owning the same URL has no tag of its own to be read from, so its "no" was
+ * skipped by the early return and the script ran — while the server, matching
+ * by URL, kept it parked. Only declared owners are consulted here: between two
+ * catalogue providers the tag is what tells them apart (an Ads loader that also
+ * matches the Analytics pattern must not be held by the Analytics refusal).
+ *
+ * @param {string} target URL or inline content the element would load.
+ * @return {boolean}
+ */
+function _fazDeclaredOwnerRefusesTarget(target) {
+    if (!_fazStore._perServiceConsent) return false;
+    var providers = _fazMatchingProviders(target);
+    for (var pi = 0; pi < providers.length; pi++) {
+        var owners = _fazGetDeclaredPatternOwners(providers[pi].re);
+        for (var oi = 0; oi < owners.length; oi++) {
+            if (_fazRef._fazGetFromStore("svc." + owners[oi]) === "no") return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Whether the visitor refused a service that has a script pattern to block —
+ * an owner in the pattern map, or the id named on a _providersToBlock entry.
+ * While one is, the script interceptors still have something to hold even with
+ * every category granted.
+ *
+ * @return {boolean}
+ */
+function _fazAnyPatternServiceRefused() {
+    if (!_fazStore._perServiceConsent) return false;
+    var refused = function (id) {
+        return !!id && _fazRef._fazGetFromStore("svc." + id) === "no";
+    };
+    var psMap = _fazGetPatternServiceMap();
+    for (var pattern in psMap) {
+        if (Object.prototype.hasOwnProperty.call(psMap, pattern) && psMap[pattern].some(refused)) return true;
+    }
+    return Array.isArray(_fazStore._providersToBlock) && _fazStore._providersToBlock.some(function (provider) {
+        return !!provider && refused(provider.service);
+    });
 }
 
 /**
@@ -8939,7 +8990,9 @@ function _fazShouldBlockResource(category, target, serviceId) {
             // Mirrors the server-side get_enforceable_services() resolution. #134/#146.
             var explicit = _fazRef._fazGetFromStore("svc." + serviceId);
             if (explicit === "no") return true;
-            if (explicit === "yes") return false;
+            // The grant is for the tagged service alone: a declared service
+            // naming the same URL keeps its own refusal.
+            if (explicit === "yes" && !_fazDeclaredOwnerRefusesTarget(target)) return false;
         }
         var targetConsent = _fazGetServiceConsentForTarget(target);
         if (targetConsent === "no") return true;
@@ -9318,14 +9371,22 @@ function _fazShouldChangeType(element, src, typeOverride) {
     if (_fazStore._perServiceConsent && serviceId && _fazIsRecognizedService(serviceId)) {
         var explicit = _fazRef._fazGetFromStore("svc." + serviceId);
         if (explicit === "no") return true;
-        if (explicit === "yes") return false;
+        // As in _fazShouldBlockResource: the grant is for the tagged service
+        // alone, a declared service naming the same URL keeps its refusal.
+        if (explicit === "yes" && !_fazDeclaredOwnerRefusesTarget(url)) return false;
     }
+    // An explicit refusal of a service that owns this URL is read BEFORE the
+    // Advanced exemption, as _fazShouldBlockResource does. A dynamic gtag.js
+    // script carries no data-faz-service, so the check above never sees it and
+    // the exemption returned before _fazShouldBlockProvider() could ask its
+    // owners: the visitor's "no" to that Google service did not hold it.
+    if (_fazGetServiceConsentForTarget(url) === "no") return true;
     // Advanced Consent Mode (#165): let Consent-Mode-aware Google tags load
     // before consent (the synchronous denied `consent default` in <head> keeps
     // their pre-consent hits cookieless); mirrors the server-side
     // is_advanced_consent_exempt(). gtm.js stays blocked unless the site
     // owner opted the container in (#385).
-    // Placed AFTER the explicit per-service check above so an svc.<id>:no
+    // Placed AFTER the per-service checks above so an svc.<id>:no
     // (deliberate rejection of this Google service) still hard-blocks it.
     if (_fazIsAdvancedConsentExempt(url)) return false;
     // Tracker decision (also the exemption gate): block when the element's
@@ -9808,12 +9869,16 @@ function _fazAfterConsent() {
         return;
     }
 
-    // Clean up script interception if no categories remain blocked.
+    // Clean up script interception if nothing remains blocked.
     // Revocations always trigger a page reload above, so the interceptors
     // will be reinstated on the fresh page load if needed.
+    // A refused service with a script pattern keeps them too: a first save
+    // that grants every category and switches one service off revokes
+    // nothing, so no reload follows, and without the interceptors that
+    // service's script injected later would load unchecked.
     var anyBlocked = _fazStore._categories.some(
         function (cat) { return !cat.isNecessary && _fazIsCategoryToBeBlocked(cat.slug); }
-    );
+    ) || _fazAnyPatternServiceRefused();
     if (!anyBlocked) {
         _fazNodeListObserver.disconnect();
         document.createElement = _fazCreateElementBackup;
