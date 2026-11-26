@@ -240,11 +240,30 @@ $GLOBALS['_faz_test_options']['faz_geo_admin_overrides'] = array( 'IT' => $optou
 $ctx = $routing->get_visitor_context( '203.0.113.42', 'IT', '' );
 vpn_check( is_array( $ctx ) && isset( $ctx['ruleset']['model'] ) && 'opt-in' === $ctx['ruleset']['model'] && VPN_FALLBACK === $ctx['ruleset_id'], 'an opt-out delta on an opt-in country is not served to an unverified address either' );
 
-// Deltas that leave the result opt-in are still the administrator's to make.
+// A country's deltas were written for that country's own rule set. Once the
+// unverified VPN state has replaced it with the fallback they do not apply:
+// a US delta that pre-grants analytics (the California rule set grants it by
+// default) would otherwise grant it before consent in an opt-in regime.
 vpn_reset();
-$GLOBALS['_faz_test_options']['faz_geo_admin_overrides'] = array( 'US' => array( 'ruleset_id' => null, 'delta' => array( 'model' => 'opt-in', 'ui.revisit_widget_required' => false ) ) );
+$GLOBALS['_faz_test_options']['faz_geo_admin_overrides'] = array( 'US' => array( 'ruleset_id' => null, 'delta' => array( 'ui.default_categories.analytics' => 'granted', 'ui.revisit_widget_required' => false ) ) );
 $ctx = $routing->get_visitor_context( '203.0.113.43', 'US', 'US-CA' );
-vpn_check( is_array( $ctx ) && VPN_FALLBACK === $ctx['ruleset_id'] && 'opt-in' === $ctx['ruleset']['model'] && false === $ctx['ruleset']['ui']['revisit_widget_required'], 'a delta that keeps the result opt-in is still applied to the fallback' );
+vpn_check( is_array( $ctx ) && VPN_FALLBACK === $ctx['ruleset_id'] && 'opt-in' === $ctx['ruleset']['model'], 'precondition: an unverified California address gets the opt-in fallback' );
+vpn_check( is_array( $ctx ) && 'denied' === ( $ctx['ruleset']['ui']['default_categories']['analytics'] ?? null ), 'a US delta that grants analytics is not applied to the fallback' );
+vpn_check( is_array( $ctx ) && true === ( $ctx['ruleset']['ui']['revisit_widget_required'] ?? null ), 'nor is any other US delta: the fallback is served as shipped' );
+
+// A verified visitor keeps the same deltas on the country's own rule set.
+vpn_reset();
+$GLOBALS['_faz_test_http_stub'] = $not_a_vpn;
+$ctx = $routing->get_visitor_context( '203.0.113.44', 'US', 'US-CA' );
+vpn_check( is_array( $ctx ) && 'ccpa-california' === $ctx['ruleset_id'] && false === ( $ctx['ruleset']['ui']['revisit_widget_required'] ?? null ), 'control: for a visitor ipinfo cleared the US deltas still apply' );
+
+// An opt-in country is not replaced, so its deltas still apply to an
+// unverified address.
+vpn_reset();
+$GLOBALS['_faz_test_http_stub']                          = null; // WP_Error.
+$GLOBALS['_faz_test_options']['faz_geo_admin_overrides'] = array( 'IT' => array( 'ruleset_id' => null, 'delta' => array( 'ui.revisit_widget_required' => false ) ) );
+$ctx = $routing->get_visitor_context( '203.0.113.45', 'IT', '' );
+vpn_check( is_array( $ctx ) && 'gdpr-italy' === $ctx['ruleset_id'] && false === ( $ctx['ruleset']['ui']['revisit_widget_required'] ?? null ), 'an opt-in country keeps its own deltas when the VPN state is unverified' );
 unset( $GLOBALS['_faz_test_options']['faz_geo_admin_overrides'] );
 
 echo "\n== A fallback that cannot be loaded does not leave the opt-out rule set in place ==\n\n";

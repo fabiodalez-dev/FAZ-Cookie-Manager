@@ -360,9 +360,11 @@ class Geo_Routing {
 			// protective_ruleset() cannot fail: when the fallback file itself
 			// cannot be loaded it answers with a built-in opt-in copy, so the
 			// opt-out rule set never survives a failed replacement.
-			$vpn_unverified = ! empty( $geo['vpn_unverified'] );
+			$vpn_unverified       = ! empty( $geo['vpn_unverified'] );
+			$replaced_by_fallback = false;
 			if ( $vpn_unverified && self::is_opt_out_ruleset( $ruleset ) ) {
 				list( $ruleset, $ruleset_id ) = self::protective_ruleset( $loader );
+				$replaced_by_fallback         = true;
 			}
 
 			// L2-SP1-S004 fix (1.15.0): apply per-country delta override
@@ -370,8 +372,14 @@ class Geo_Routing {
 			// `signals.cmv2.ad_storage=denied` in the override editor
 			// would see the value persisted but never reflected at
 			// runtime — the operator intent would silently no-op.
+			//
+			// A country's deltas were written for that country's own rule set.
+			// When the unverified VPN state has just replaced it with the
+			// fallback they are skipped: a US delta that pre-grants a category
+			// (as the opt-out rule sets do by default) would otherwise grant it
+			// before consent in the opt-in regime the replacement exists for.
 			$country = isset( $geo['country'] ) ? $geo['country'] : '';
-			if ( '' !== $country && isset( $overrides[ $country ]['delta'] ) && is_array( $overrides[ $country ]['delta'] ) && is_array( $ruleset ) ) {
+			if ( ! $replaced_by_fallback && '' !== $country && isset( $overrides[ $country ]['delta'] ) && is_array( $overrides[ $country ]['delta'] ) && is_array( $ruleset ) ) {
 				foreach ( $overrides[ $country ]['delta'] as $dot_path => $value ) {
 					$ruleset = self::apply_delta( $ruleset, (string) $dot_path, $value );
 				}
