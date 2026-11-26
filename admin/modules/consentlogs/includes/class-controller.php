@@ -54,6 +54,13 @@ class Controller {
 	const GEO_BOOTSTRAP_STRICT_RULESET = 'fallback-gdpr-most-protective';
 
 	/**
+	 * One-off cron hook that resumes a retention purge stopped at its cap.
+	 *
+	 * @since 1.40.1
+	 */
+	const RETENTION_CONTINUE_HOOK = 'faz_consent_log_retention_continue';
+
+	/**
 	 * Return the current instance of the class
 	 *
 	 * @return Controller
@@ -410,12 +417,23 @@ class Controller {
 				if ( $count >= $client_cap ) {
 					break;
 				}
-				$key = substr( sanitize_text_field( (string) $key ), 0, 190 );
+				$key = (string) $key;
+				if ( 0 === strpos( $key, 'ck.' ) ) {
+					// A per-cookie key carries a cookie NAME, and that is whatever
+					// the administrator declared for the service. It is encoded
+					// rather than cleaned or dropped — see the method.
+					$key = $this->encode_cookie_decision_key( $key );
+				} else {
+					$key = substr( sanitize_text_field( $key ), 0, 190 );
+				}
 				// Keys are category slugs, svc.<id>, ck.<cookie name> and meta.*:
 				// printable ASCII. Anything outside it (a quote, a backslash,
 				// non-ASCII that wp_json_encode() turns into six-byte \u escapes)
 				// only lets an anonymous row grow several-fold or break out of
-				// its CSV field, so such a key is dropped.
+				// its CSV field, so such a key is dropped. A ck.* key has just
+				// been encoded into this alphabet and always passes; the slugs
+				// and ids of the other three are sanitize_key()'d where they
+				// are defined, so nothing legitimate is lost by the drop.
 				if ( ! preg_match( '/^[\x21\x23-\x5B\x5D-\x7E]+$/', $key ) ) {
 					continue;
 				}
@@ -1554,6 +1572,56 @@ class Controller {
 	}
 
 	/**
+	 * Encode a per-cookie decision key (ck.<service>.<cookie name>) for storage.
+	 *
+	 * The browser builds the key with _fazCkKey() in script.js, which escapes
+	 * only `%`, `:` and `,` in the cookie name — the three characters the
+	 * consent cookie's own `key:value,key:value` format reserves. Every other
+	 * character of a name the administrator declared arrives as it is: a
+	 * space, an accented letter, a quote.
+	 *
+	 * Such a key used to be dropped, and a dropped ck.*:no is not a neutral
+	 * loss. The row keeps svc.<id>:yes with nothing overriding it, so the
+	 * record shows more consent than the visitor gave. sanitize_text_field()
+	 * was no better for the keys it let through: it removes percent-encoded
+	 * octets, so the `%3A` the browser wrote for "a:b" was stripped and the
+	 * decision landed on the unrelated cookie "ab".
+	 *
+	 * So the key is percent-encoded here instead: every byte outside the
+	 * stored alphabet becomes %XX (UTF-8 bytes for a non-ASCII name, as
+	 * encodeURIComponent() would write them). `%` itself is left alone, which
+	 * keeps the browser's own escapes intact and makes the result exactly what
+	 * _fazCkKey() would produce if it escaped these bytes too. `<` and `>` are
+	 * encoded as well: the tag stripping this replaces is what kept markup out
+	 * of the column. The output is printable ASCII, at most three bytes per
+	 * input byte and capped like every other key, so the reasons for the drop
+	 * (row growth, a quote or backslash reaching the CSV export) still hold.
+	 *
+	 * It is done on this side on purpose. Escaping more in _fazCkKey() would
+	 * change the key of consent cookies already in visitors' browsers, and
+	 * faz_get_consent_cookie_value() passes the cookie through
+	 * sanitize_text_field(), so new escapes would be stripped before the
+	 * server-side resolver could match them. Encoding the log entry changes
+	 * neither.
+	 *
+	 * @since 1.40.1
+	 * @param string $key Decision key starting with `ck.`.
+	 * @return string Key in printable ASCII, at most 190 bytes.
+	 */
+	private function encode_cookie_decision_key( $key ) {
+		$key = preg_replace_callback(
+			'/[^\x21\x23-\x3B\x3D\x3F-\x5B\x5D-\x7E]+/',
+			static function ( $run ) {
+				return rawurlencode( $run[0] );
+			},
+			(string) $key
+		);
+		$key = substr( (string) $key, 0, 190 );
+		// The cap may fall inside an escape; half of one is not a byte of the name.
+		return (string) preg_replace( '/%[0-9A-Fa-f]?$/', '', $key );
+	}
+
+	/**
 	 * Cleanup old consent logs beyond a given retention period.
 	 *
 	 * @param int $months Number of months to retain. Logs older than this are deleted.
@@ -1662,6 +1730,51 @@ class Controller {
 			// leave expired rows behind until the next cron run.
 		} while ( count( $ids ) === $batch_size && $deleted < $max_rows );
 
+		// Stopped by the cap, not by running out of expired rows. One run a day
+		// at the default cap removes 200000 rows, so a site that records more
+		// decisions than that a day never emptied its backlog: rows past the
+		// retention period only accumulated, which is the storage-limitation
+		// failure this purge exists to prevent. The rest is resumed by a one-off
+		// event a few minutes later, each run still bounded by the same cap,
+		// until a run ends below it. A run stopped by a database error breaks
+		// out below the cap and is left to the next daily run instead of being
+		// retried every few minutes against a failing table.
+		if ( $deleted >= $max_rows ) {
+			self::schedule_retention_continuation();
+		}
+
 		return (int) $deleted;
+	}
+
+	/**
+	 * Schedule the next slice of a purge that stopped at its cap.
+	 *
+	 * @since 1.40.1
+	 * @return void
+	 */
+	private static function schedule_retention_continuation() {
+		if ( ! function_exists( 'wp_schedule_single_event' ) || wp_next_scheduled( self::RETENTION_CONTINUE_HOOK ) ) {
+			return;
+		}
+		wp_schedule_single_event( time() + 15 * 60, self::RETENTION_CONTINUE_HOOK );
+	}
+
+	/**
+	 * Cron callback: resume the consent-log retention purge.
+	 *
+	 * Reads the retention setting again instead of carrying the one the first
+	 * slice ran with, so an administrator who turned the purge off (0) or
+	 * lengthened the window in the meantime is obeyed by the next slice. Same
+	 * reading as Activator::run_retention_cleanup(), which starts the purge.
+	 *
+	 * @since 1.40.1
+	 * @return void
+	 */
+	public static function continue_retention() {
+		$settings = get_option( 'faz_settings' );
+		$months   = isset( $settings['consent_logs']['retention'] ) ? (int) $settings['consent_logs']['retention'] : 12;
+		if ( $months > 0 ) {
+			self::get_instance()->cleanup_old_logs( $months );
+		}
 	}
 }
