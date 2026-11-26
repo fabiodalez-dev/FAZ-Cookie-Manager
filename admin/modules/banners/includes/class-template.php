@@ -717,9 +717,17 @@ class Template {
 				// swaps the default icon for an inline SVG, and skips an image with
 				// this class whatever its URL says. The button already carries the
 				// accessible name, so the image needs no text of its own.
+				//
+				// Only an image this site serves itself. The widget is in the
+				// template of every page, first visit included, and a browser
+				// fetches an <img> as soon as it is in the document, shown or
+				// not: an image on another host would hand that host the
+				// visitor's address before any choice, and after a refusal too.
+				// Such a URL can only arrive past the editor (REST, import), whose
+				// picker offers the Media Library; the default icon stays.
 				if ( 'revisit-consent' === $tag && ! empty( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
 					$revisit_url = esc_url_raw( $config['meta']['url'], array( 'http', 'https' ) );
-					if ( '' !== $revisit_url ) {
+					if ( '' !== $revisit_url && self::is_first_party_image_url( $revisit_url ) ) {
 						foreach ( $element->getElementsByTagName( 'img' ) as $revisit_img ) {
 							$revisit_img->setAttribute( 'src', $revisit_url );
 							// Added to the classes already there: skip-lazy keeps lazy loaders off it.
@@ -1001,6 +1009,82 @@ class Template {
 				$logo_img->setAttribute( 'alt', $logo_alt );
 			}
 		}
+	}
+
+	/**
+	 * Whether an image URL configured for the banner is served by this site.
+	 *
+	 * The banner template is printed on every page before the visitor has
+	 * chosen anything, so each image in it is a request the visitor did not
+	 * agree to. One to the site itself tells nobody anything new; one to
+	 * another host discloses the visit to it. A URL passes when it is a path on
+	 * this site or its host is the site's own: the home and site addresses, as
+	 * WordPress reports them for the request and as they are stored, and the
+	 * host of the uploads folder, which is where an offloaded Media Library
+	 * lives. `www.` is ignored on both sides.
+	 *
+	 * The `faz_banner_image_hosts` filter adds hosts the site owner answers
+	 * for, such as a CDN domain of their own that WordPress does not know.
+	 *
+	 * @param string $url Image URL from the banner config.
+	 * @return bool
+	 */
+	public static function is_first_party_image_url( $url ) {
+		$url = trim( (string) $url );
+		// A backslash is a slash to a browser (`/\host` leaves the site) but
+		// not to the parser below, and a control character has no place here.
+		if ( '' === $url || '#' === $url || preg_match( '/[\\\\\x00-\x20\x7f]/', $url ) ) {
+			return false;
+		}
+		if ( '/' === $url[0] && ( ! isset( $url[1] ) || '/' !== $url[1] ) ) {
+			return true;
+		}
+		$host = self::image_host( $url );
+		if ( '' === $host ) {
+			return false;
+		}
+		$own = array();
+		foreach ( array( 'home_url', 'site_url' ) as $address ) {
+			if ( function_exists( $address ) ) {
+				$own[] = (string) $address();
+			}
+		}
+		$own[] = (string) get_option( 'home', '' );
+		$own[] = (string) get_option( 'siteurl', '' );
+		if ( function_exists( 'wp_get_upload_dir' ) ) {
+			$uploads = wp_get_upload_dir();
+			$own[]   = isset( $uploads['baseurl'] ) ? (string) $uploads['baseurl'] : '';
+		}
+		$hosts = array_filter( array_map( array( __CLASS__, 'image_host' ), $own ) );
+		/**
+		 * Hosts the banner may load its custom images (revisit widget image)
+		 * from before consent, besides the site's own.
+		 *
+		 * @param string[] $hosts Host names, lower case, without `www.`.
+		 * @param string   $url   The image URL being checked.
+		 */
+		$hosts = apply_filters( 'faz_banner_image_hosts', array_values( array_unique( $hosts ) ), $url );
+		foreach ( is_array( $hosts ) ? $hosts : array() as $allowed ) {
+			if ( is_string( $allowed ) && '' !== $allowed && self::image_host( '//' . $allowed ) === $host ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Host of a URL, lower case and without a leading `www.`; '' when it has none.
+	 *
+	 * @param string $url Absolute or protocol-relative URL.
+	 * @return string
+	 */
+	private static function image_host( $url ) {
+		$host = wp_parse_url( (string) $url, PHP_URL_HOST );
+		if ( ! is_string( $host ) || '' === $host ) {
+			return '';
+		}
+		$host = strtolower( $host );
+		return 0 === strpos( $host, 'www.' ) ? substr( $host, 4 ) : $host;
 	}
 
 	/**
