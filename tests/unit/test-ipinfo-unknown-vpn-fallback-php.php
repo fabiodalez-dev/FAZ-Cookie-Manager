@@ -214,6 +214,103 @@ vpn_check( 0 === $GLOBALS['_faz_test_http_calls'], 'precondition: with the opt-i
 vpn_check( is_array( $ctx ) && 'ccpa-california' === $ctx['ruleset_id'] && empty( $ctx['vpn_unverified'] ), 'the opt-out rule set is served as before: no VPN detection was requested' );
 $GLOBALS['_faz_test_options']['faz_geo_ipinfo_optin'] = true;
 
+echo "\n== A per-country delta cannot turn the unverified result back into opt-out ==\n\n";
+
+// The deltas of faz_geo_admin_overrides are applied AFTER the protective
+// replacement, and the REST sanitizer accepts one on `model`.
+$optout_delta = array( 'ruleset_id' => null, 'delta' => array( 'model' => 'opt-out-with-sensitive-opt-in' ) );
+
+vpn_reset();
+$GLOBALS['_faz_test_options']['faz_geo_admin_overrides'] = array( 'US' => $optout_delta );
+$GLOBALS['_faz_test_http_stub']                          = $not_a_vpn;
+$ctx = $routing->get_visitor_context( '203.0.113.40', 'US', 'US-CA' );
+vpn_check( is_array( $ctx ) && 'ccpa-california' === $ctx['ruleset_id'] && 'opt-out-with-sensitive-opt-in' === $ctx['ruleset']['model'], 'control: for a visitor ipinfo cleared the model delta is applied as saved' );
+
+vpn_reset();
+$GLOBALS['_faz_test_http_stub'] = null; // WP_Error.
+$ctx = $routing->get_visitor_context( '203.0.113.41', 'US', 'US-CA' );
+vpn_check( is_array( $ctx ) && ! empty( $ctx['vpn_unverified'] ), 'precondition: ipinfo unreachable, the VPN state is unverified' );
+vpn_check( is_array( $ctx ) && isset( $ctx['ruleset']['model'] ) && 0 !== strpos( (string) $ctx['ruleset']['model'], 'opt-out' ), 'an opt-out delta on `model` for US does not make the fallback opt-out again' );
+vpn_check( is_array( $ctx ) && VPN_FALLBACK === $ctx['ruleset_id'] && 'opt-in' === $ctx['ruleset']['model'], 'the visitor gets the most-protective fallback, as an opt-in rule set' );
+
+// The same delta on a country whose own rule set is opt-in: the resolved rule
+// set was never opt-out, the delta makes it one.
+vpn_reset();
+$GLOBALS['_faz_test_options']['faz_geo_admin_overrides'] = array( 'IT' => $optout_delta );
+$ctx = $routing->get_visitor_context( '203.0.113.42', 'IT', '' );
+vpn_check( is_array( $ctx ) && isset( $ctx['ruleset']['model'] ) && 'opt-in' === $ctx['ruleset']['model'] && VPN_FALLBACK === $ctx['ruleset_id'], 'an opt-out delta on an opt-in country is not served to an unverified address either' );
+
+// Deltas that leave the result opt-in are still the administrator's to make.
+vpn_reset();
+$GLOBALS['_faz_test_options']['faz_geo_admin_overrides'] = array( 'US' => array( 'ruleset_id' => null, 'delta' => array( 'model' => 'opt-in', 'ui.revisit_widget_required' => false ) ) );
+$ctx = $routing->get_visitor_context( '203.0.113.43', 'US', 'US-CA' );
+vpn_check( is_array( $ctx ) && VPN_FALLBACK === $ctx['ruleset_id'] && 'opt-in' === $ctx['ruleset']['model'] && false === $ctx['ruleset']['ui']['revisit_widget_required'], 'a delta that keeps the result opt-in is still applied to the fallback' );
+unset( $GLOBALS['_faz_test_options']['faz_geo_admin_overrides'] );
+
+echo "\n== A fallback that cannot be loaded does not leave the opt-out rule set in place ==\n\n";
+
+// A catalogue copy the loader reads through the `faz_geo_rulesets_dir` filter:
+// the index and the California rule set are the shipped ones, the fallback is
+// what each case makes of it.
+$shipped_dir  = $root . '/admin/modules/geo-routing/rulesets/';
+$broken_dir   = sys_get_temp_dir() . '/faz-vpn-fallback-' . getmypid() . '/';
+$fallback_src = $shipped_dir . VPN_FALLBACK . '.json';
+mkdir( $broken_dir );
+copy( $shipped_dir . '_index.json', $broken_dir . '_index.json' );
+copy( $shipped_dir . 'ccpa-california.json', $broken_dir . 'ccpa-california.json' );
+$GLOBALS['_faz_test_filters']['faz_geo_rulesets_dir'] = function () use ( $broken_dir ) { return $broken_dir; };
+
+require_once $root . '/frontend/includes/class-geo-runtime.php';
+$shipped_fallback = json_decode( file_get_contents( $fallback_src ), true );
+$broken_fallbacks = array(
+	'missing'               => null,
+	'not valid JSON'        => '{ "id": ',
+	'failing the schema'    => '{"id":"' . VPN_FALLBACK . '","model":"opt-in"}',
+	'itself an opt-out one' => str_replace( '"model": "opt-in"', '"model": "opt-out-with-sensitive-opt-in"', file_get_contents( $fallback_src ) ),
+);
+$n = 50;
+foreach ( $broken_fallbacks as $what => $content ) {
+	vpn_reset();
+	@unlink( $broken_dir . VPN_FALLBACK . '.json' );
+	if ( null !== $content ) {
+		file_put_contents( $broken_dir . VPN_FALLBACK . '.json', $content );
+	}
+	$GLOBALS['_faz_test_http_stub'] = $not_a_vpn;
+	$ctx = $routing->get_visitor_context( '203.0.113.' . ( ++$n ), 'US', 'US-CA' );
+	vpn_check( is_array( $ctx ) && 'ccpa-california' === $ctx['ruleset_id'], "fallback $what, control: the California rule set itself still loads" );
+
+	vpn_reset();
+	$GLOBALS['_faz_test_http_stub'] = null; // WP_Error.
+	$ctx     = $routing->get_visitor_context( '203.0.113.' . ( ++$n ), 'US', 'US-CA' );
+	$ruleset = is_array( $ctx ) ? $ctx['ruleset'] : null;
+	vpn_check( is_array( $ctx ) && ! empty( $ctx['vpn_unverified'] ), "fallback $what: the VPN state is unverified" );
+	vpn_check( is_array( $ruleset ) && isset( $ruleset['model'] ) && 'opt-in' === $ruleset['model'], "fallback $what: the result carries an opt-in rule set, not the opt-out one" );
+	vpn_check( is_array( $ctx ) && VPN_FALLBACK === $ctx['ruleset_id'] && is_array( $ruleset ) && VPN_FALLBACK === ( $ruleset['id'] ?? '' ), "fallback $what: it is recorded under the fallback's id" );
+	// What the consumers do with it: Geo_Runtime is what the frontend, the
+	// banner REST endpoint and AMP read the rule set through.
+	vpn_check( is_array( $ruleset ) && 'gdpr' === \FazCookie\Frontend\Includes\Geo_Runtime::model_to_law( $ruleset ), "fallback $what: the runtime enforces it as opt-in" );
+	$denied = is_array( $ruleset );
+	foreach ( array( 'functional', 'analytics', 'marketing', 'profiling' ) as $slug ) {
+		$denied = $denied && false === \FazCookie\Frontend\Includes\Geo_Runtime::category_default( $ruleset, $slug );
+	}
+	vpn_check( $denied, "fallback $what: every non-necessary category is denied until the visitor acts" );
+	if ( 'missing' === $what ) {
+		$same = is_array( $ruleset );
+		foreach ( array( 'id', 'model', 'signals', 'ui' ) as $key ) {
+			$same = $same && isset( $ruleset[ $key ] ) && $ruleset[ $key ] === $shipped_fallback[ $key ];
+		}
+		vpn_check( $same, 'the built-in copy enforces exactly what the shipped fallback file does (id, model, signals, ui)' );
+	}
+}
+
+unset( $GLOBALS['_faz_test_filters']['faz_geo_rulesets_dir'] );
+array_map( 'unlink', glob( $broken_dir . '*' ) );
+rmdir( $broken_dir );
+vpn_reset();
+$GLOBALS['_faz_test_http_stub'] = null;
+$ctx = $routing->get_visitor_context( '203.0.113.90', 'US', 'US-CA' );
+vpn_check( is_array( $ctx ) && isset( $ctx['ruleset']['display_name'] ), 'control: back on the shipped catalogue the fallback is the file, not the built-in copy' );
+
 echo "\n== Geo_Detector marks only the failed lookup ==\n\n";
 
 class Faz_Test_Vpn_Ipinfo extends Ipinfo_Client {
