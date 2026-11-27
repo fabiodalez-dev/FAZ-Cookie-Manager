@@ -8353,8 +8353,20 @@ function _fazUnblockServerSide() {
     // skipped: the held sheet stayed inert after the visitor accepted, until
     // the next page load. Whoever wrote the marker, what it holds is given
     // back by the rule below.
+    //
+    // A sheet that also carries data-faz-css is left to 4b. That happens when
+    // a held sheet later took a blocked append(): the attribute then holds the
+    // original of the WHOLE sheet, the held text included, while the live
+    // text carries the appended URL already neutralised. Reading the live
+    // text here after consent to the held URL alone, and writing it back,
+    // dropped the attribute with the only copy of the appended original, so
+    // a later consent to it had nothing to give back. 4b restores the sheet
+    // once every URL in that original is allowed, and the marker it brings
+    // back with it is stripped by this pass on the same run, which comes
+    // after 4b.
     document.querySelectorAll('style')
         .forEach(function (el) {
+            if (el.hasAttribute("data-faz-css")) return;
             var live = el.textContent || "";
             if (live.indexOf(_FAZ_HELD_CSS_URL) === -1) return;
             var css = live.split(_FAZ_HELD_CSS_URL).join("");
