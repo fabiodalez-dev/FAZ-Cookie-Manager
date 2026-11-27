@@ -58,7 +58,7 @@ $readers = array();
 $files   = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ) );
 foreach ( $files as $file ) {
 	$path = str_replace( '\\', '/', substr( (string) $file, strlen( $root ) ) );
-	if ( preg_match( '#^/(?:tests|vendor|node_modules|\.git|graphify-out|\.code-review-graph)/#', $path ) ) {
+	if ( preg_match( '#^/(?:tests|vendor|node_modules|\.git|\.claude|graphify-out|\.code-review-graph)/#', $path ) ) {
 		continue;
 	}
 	if ( preg_match( '/\.php$/', $path ) ) {

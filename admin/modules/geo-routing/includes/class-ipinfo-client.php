@@ -10,6 +10,10 @@
  *   - 24h cache per IP-hash (NFR-03 — hash with monthly salt, never cleartext IP)
  *   - 3s timeout + graceful degrade to `{vpn: null}` on any error
  *   - Returns `{vpn: bool|null, source: 'cache'|'ipinfo'|'skip'|'error'}`
+ *   - `source: 'error'` means the verdict was wanted and could not be had
+ *     (refusal, spent hourly budget, transport). It is not "not a VPN":
+ *     Geo_Detector flags the result and Geo_Routing keeps such a visitor off
+ *     an opt-out rule set.
  *
  * Constitution VIII Data Minimization — cache key is IP hash, not IP.
  * Constitution IX Cross-Border — Admin must attest DPF/SCC before opt-in.
@@ -46,6 +50,8 @@ class Ipinfo_Client {
 	const IPV6_LOOKUPS_PER_HOUR = 20;
 	/** Seconds into a window after which a missing object-cache counter means it was dropped (see reserve_slot()). */
 	const WINDOW_GRACE = 2;
+	/** Option remembering the last hour in which the site-wide budget ran out (see note_budget_spent()). */
+	const BUDGET_SPENT_OPTION = 'faz_geo_ipinfo_budget_spent';
 
 	/** HTTP status of the last lookup (0 for a transport failure). */
 	private $last_http_status = 0;
@@ -121,8 +127,10 @@ class Ipinfo_Client {
 		// client repeating itself; it cannot stop one that rotates addresses,
 		// and without a persistent object cache every miss is also two
 		// wp_options rows kept for a day. Past the ceiling the lookup is
-		// skipped (no VPN verdict, the geo rules decide without it), so the
-		// operator's quota and the options table are both bounded.
+		// skipped, so the operator's quota and the options table are both
+		// bounded. The answer is 'error', not a verdict: Geo_Routing reads it
+		// as "VPN state unknown" and does not hand such a visitor an opt-out
+		// rule set, and the refusal is recorded for the Geo-routing status.
 		if ( ! $this->claim_lookup( $persistent, $ip ) ) {
 			return array(
 				'vpn'         => null,
@@ -182,9 +190,7 @@ class Ipinfo_Client {
 	 * @return bool False when the hour's budget is spent.
 	 */
 	private function claim_lookup( $persistent, $ip ) {
-		$max = function_exists( 'apply_filters' )
-			? (int) apply_filters( 'faz_ipinfo_lookups_per_hour', self::LOOKUPS_PER_HOUR )
-			: self::LOOKUPS_PER_HOUR;
+		$max = $this->lookups_per_hour();
 		if ( $max <= 0 ) {
 			return true; // 0 switches the ceiling off.
 		}
@@ -193,6 +199,7 @@ class Ipinfo_Client {
 		$site = $this->peek_window( $mode, self::BUDGET_KEY, $now );
 		if ( $site['n'] >= $max ) {
 			$this->budget_retry_after = max( 1, $site['start'] + HOUR_IN_SECONDS - $now );
+			$this->note_budget_spent( $site['start'], $now );
 			return false;
 		}
 		$bucket = function_exists( 'faz_ip_rate_bucket' ) ? faz_ip_rate_bucket( $ip ) : $ip;
@@ -206,9 +213,97 @@ class Ipinfo_Client {
 		$left = $this->reserve_slot( $mode, self::BUDGET_KEY, $max, $now );
 		if ( $left > 0 ) {
 			$this->budget_retry_after = $left;
+			$this->note_budget_spent( $now + $left - HOUR_IN_SECONDS, $now );
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * The site-wide ceiling of new upstream lookups per hour.
+	 *
+	 * @return int 0 or less means no ceiling.
+	 */
+	private function lookups_per_hour() {
+		if ( ! function_exists( 'apply_filters' ) ) {
+			return self::LOOKUPS_PER_HOUR;
+		}
+		/**
+		 * Filter the number of NEW ipinfo.io lookups the site may make per hour.
+		 *
+		 * A lookup is "new" when the address has no cached verdict (verdicts
+		 * are kept for 24 hours), so this is roughly the number of previously
+		 * unseen visitor addresses per hour that can be classified. Past it
+		 * ipinfo is not called until the hour is over: the VPN state of those
+		 * visitors is unknown, Geo_Routing serves them the most-protective
+		 * fallback wherever their location would have selected an opt-out
+		 * rule set, and Geo-routing > Pipeline status reports that the budget
+		 * was spent. Raise it on a site whose traffic and ipinfo plan allow
+		 * more; return 0 to remove the ceiling.
+		 *
+		 * Example: `add_filter( 'faz_ipinfo_lookups_per_hour', function () { return 1000; } );`
+		 *
+		 * @since 1.39.1
+		 * @param int $lookups Default 120 (Ipinfo_Client::LOOKUPS_PER_HOUR).
+		 */
+		return (int) apply_filters( 'faz_ipinfo_lookups_per_hour', self::LOOKUPS_PER_HOUR );
+	}
+
+	/**
+	 * Remember that the site-wide budget ran out in this window.
+	 *
+	 * A refused lookup changes what visitors are served, and until this was
+	 * recorded nothing told the administrator it had happened. One options row,
+	 * written once per window and not once per refusal: a flood past the
+	 * ceiling must not turn every refused request into a write.
+	 *
+	 * @param int $window_start Start of the window that is spent.
+	 * @param int $now          Current time.
+	 */
+	private function note_budget_spent( $window_start, $now ) {
+		if ( ! function_exists( 'update_option' ) ) {
+			return;
+		}
+		$last = get_option( self::BUDGET_SPENT_OPTION, array() );
+		if ( is_array( $last ) && isset( $last['window'] ) && (int) $last['window'] === (int) $window_start ) {
+			return;
+		}
+		update_option(
+			self::BUDGET_SPENT_OPTION,
+			array(
+				'window' => (int) $window_start,
+				'at'     => (int) $now,
+			),
+			false
+		);
+	}
+
+	/**
+	 * What the hourly budget and the account look like right now, for the
+	 * Geo-routing status panel. Reads only: the counters and the refusal
+	 * marker lookup() already keeps, and the row note_budget_spent() writes.
+	 *
+	 * @return array{limit:int,used:int,spent:bool,retry_after:int,last_spent_at:int,account_refused:bool}
+	 */
+	public function budget_status() {
+		$persistent = ! function_exists( 'get_transient' ) || ( function_exists( 'wp_using_ext_object_cache' ) && wp_using_ext_object_cache() );
+		$max        = $this->lookups_per_hour();
+		$now        = time();
+		$site       = $max > 0
+			? $this->peek_window( $this->budget_backend( $persistent ), self::BUDGET_KEY, $now )
+			: array( 'n' => 0, 'start' => $now );
+		$spent      = $max > 0 && $site['n'] >= $max;
+		$last       = get_option( self::BUDGET_SPENT_OPTION, array() );
+		return array(
+			'limit'           => max( 0, $max ),
+			// A counter re-created at the ceiling (see reserve_slot()) can read
+			// above it; what was used is never more than what there was.
+			'used'            => $max > 0 ? min( $max, max( 0, (int) $site['n'] ) ) : 0,
+			'spent'           => $spent,
+			'retry_after'     => $spent ? max( 1, $site['start'] + HOUR_IN_SECONDS - $now ) : 0,
+			'last_spent_at'   => is_array( $last ) && isset( $last['at'] ) ? (int) $last['at'] : 0,
+			'account_refused' => false !== $this->cache_read( $persistent, self::REFUSED_KEY ),
+		);
 	}
 
 	/**

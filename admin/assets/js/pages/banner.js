@@ -834,6 +834,7 @@
 				bannerData = data;
 				normalizeBannerConfig(bannerData.properties);
 				populateSettings();
+				showImageHostWarnings();
 				populateContents(currentLang);
 				// Repair untouched copy stranded under the other law. Custom copy
 				// remains unchanged and is surfaced by the mismatch hint.
@@ -2463,6 +2464,7 @@
 			FAZ.put('banners/' + bannerId, payload).then(function (updated) {
 				bannerData = updated;
 				normalizeBannerConfig(bannerData.properties);
+				showImageHostWarnings();
 				FAZ.btnLoading(btn, false);
 				FAZ.notify(fazI18n('banner.saved', 'Banner settings saved.'));
 			refreshPreview();
@@ -3171,6 +3173,9 @@
 	function showImageStatus(prefix, message, type) {
 		var status = document.getElementById(prefix + '-upload-status');
 		if (!status) return;
+		// Whatever is shown next replaces a not-on-this-site warning; the
+		// caller that shows one marks the line again (showImageHostWarnings).
+		status.removeAttribute('data-faz-image-warning');
 		if (!message || type === 'clear') {
 			status.textContent = '';
 			status.style.display = 'none';
@@ -3179,6 +3184,40 @@
 		status.textContent = message;
 		status.style.display = 'block';
 		status.style.color = type === 'error' ? '#dc2626' : (type === 'success' ? '#16a34a' : '#64748b');
+	}
+
+	/**
+	 * Warn under each custom image the server reports as stored but not shown.
+	 *
+	 * The banner template renders a brand logo or a revisit widget image only
+	 * when this site serves it (Template::is_first_party_image_url() in PHP):
+	 * an image on another host would be requested from it before the visitor
+	 * has chosen anything. A URL saved before that check existed is left out
+	 * of the template, so the REST response names the affected fields in
+	 * `image_warnings` and the reason is shown here instead of the image just
+	 * vanishing from the site. Picking or removing an image clears the line
+	 * (initImagePicker), and the answer to the next save sets it again.
+	 *
+	 * @return {void}
+	 */
+	function showImageHostWarnings() {
+		var reported = (bannerData && Array.isArray(bannerData.image_warnings)) ? bannerData.image_warnings : [];
+		var fields = [
+			['brandLogo', 'faz-b-brandlogo', fazI18n('banner.logoNotOnSite', 'This logo is not shown to visitors: it is on another site and is not an image of this site\'s Media Library, so it would be requested from that site before the visitor has made a choice. Select the logo again from the Media Library.')],
+			['revisitConsent', 'faz-b-revisit-image', fazI18n('banner.revisitImageNotOnSite', 'This image is not shown to visitors, who get the default icon: it is on another site and is not an image of this site\'s Media Library, so it would be requested from that site before the visitor has made a choice. Select the image again from the Media Library.')]
+		];
+		fields.forEach(function (field) {
+			var status = document.getElementById(field[1] + '-upload-status');
+			if (!status) return;
+			if (reported.indexOf(field[0]) !== -1) {
+				showImageStatus(field[1], field[2], 'error');
+				status.setAttribute('data-faz-image-warning', '1');
+			} else if (status.getAttribute('data-faz-image-warning') === '1') {
+				// Only a warning this function set is cleared: an upload
+				// result shown in the same line stays.
+				showImageStatus(field[1], '', 'clear');
+			}
+		});
 	}
 
 	function updateBrandLogoPreview(url) {

@@ -150,6 +150,93 @@ class Geo_Routing {
 	}
 
 	/**
+	 * Whether a rule set lets processing start before the visitor acts.
+	 *
+	 * @param array|null $ruleset Loaded rule set.
+	 * @return bool
+	 */
+	private static function is_opt_out_ruleset( $ruleset ) {
+		return is_array( $ruleset ) && isset( $ruleset['model'] ) && 0 === strpos( (string) $ruleset['model'], 'opt-out' );
+	}
+
+	/**
+	 * The rule set that stands in for an opt-out one nobody could verify.
+	 *
+	 * Normally the catalogue's most-protective fallback. When that file is
+	 * missing, unreadable, fails the schema, or the index names an opt-out
+	 * rule set as the fallback, the built-in copy below is returned instead,
+	 * so the caller always receives an opt-in rule set.
+	 *
+	 * A null here would NOT be the safe answer: Geo_Runtime::resolve_for_country()
+	 * turns a missing rule set into "no runtime geo for this request", and the
+	 * frontend, the banner REST endpoint and AMP then enforce the law of the
+	 * country-selected banner. For the visitor this guards (an address that
+	 * geolocates to an opt-out US state) that banner is typically the CCPA
+	 * one, i.e. the opt-out regime again. An opt-in rule set is the one
+	 * outcome every consumer already enforces: model_to_law() maps it to
+	 * 'gdpr' and category_default() blocks each category it names.
+	 *
+	 * @param object $loader Ruleset_Loader instance.
+	 * @return array{0: array, 1: string} Rule set and its id.
+	 */
+	private static function protective_ruleset( $loader ) {
+		$fallback_id = $loader->get_fallback_id();
+		$fallback    = $loader->load_ruleset( $fallback_id );
+		if ( is_array( $fallback ) && ! self::is_opt_out_ruleset( $fallback ) ) {
+			return array( $fallback, $fallback_id );
+		}
+		return array( self::emergency_opt_in_ruleset(), 'fallback-gdpr-most-protective' );
+	}
+
+	/**
+	 * Built-in copy of what rulesets/fallback-gdpr-most-protective.json enforces.
+	 *
+	 * Only the fields the runtime reads (id, model, signals, ui), with the
+	 * same values as the shipped file: it exists for the request where that
+	 * file cannot be loaded, and must enforce what the file would have. It
+	 * carries the file's id because that is what it stands for in the consent
+	 * log and in the transfer-regime wording (Shortcodes::set_applied_ruleset()).
+	 * tests/unit/test-ipinfo-unknown-vpn-fallback-php.php fails when the two
+	 * drift apart.
+	 *
+	 * @return array
+	 */
+	private static function emergency_opt_in_ruleset() {
+		return array(
+			'id'      => 'fallback-gdpr-most-protective',
+			'model'   => 'opt-in',
+			'signals' => array(
+				'tcf_v22'      => true,
+				'gpc_honored'  => true,
+				'gpc_required' => false,
+				'dnt_honored'  => true,
+				'cmv2'         => array(
+					'ad_storage'              => 'denied',
+					'analytics_storage'       => 'denied',
+					'ad_user_data'            => 'denied',
+					'ad_personalization'      => 'denied',
+					'personalization_storage' => 'denied',
+					'functionality_storage'   => 'denied',
+					'security_storage'        => 'granted',
+				),
+			),
+			'ui'      => array(
+				'equal_weight_buttons'     => true,
+				'donotsell_link_required'  => false,
+				'sensitive_separate_optin' => true,
+				'revisit_widget_required'  => true,
+				'default_categories'       => array(
+					'necessary'  => 'granted-locked',
+					'functional' => 'denied',
+					'analytics'  => 'denied',
+					'marketing'  => 'denied',
+					'profiling'  => 'denied',
+				),
+			),
+		);
+	}
+
+	/**
 	 * Get the complete visitor context: geo + ruleset + signals.
 	 *
 	 * Single entry point for consumers (admin UI preview, banner
@@ -182,8 +269,14 @@ class Geo_Routing {
 	 *                                      e.g. US + CA-QC from resolving law25-quebec.
 	 * @return array|null Shape: ['country' => 'IT', 'region' => '',
 	 *                            'vpn' => false, 'source' => 'cf_header',
+	 *                            'vpn_unverified' => false,
 	 *                            'ruleset_id' => 'gdpr-strict',
 	 *                            'ruleset' => array $loaded_json_decoded].
+	 *                    `vpn_unverified` is true when the ipinfo lookup was
+	 *                    wanted and failed; the rule set returned is then
+	 *                    never an opt-out one, per-country deltas included:
+	 *                    it is replaced by the most-protective fallback, or
+	 *                    by a built-in opt-in copy when that cannot be loaded.
 	 */
 	public function get_visitor_context( $ip_override = null, $country_override = null, $region_override = null ) {
 		// Lazy autoload of the resolver chain (only when consumer calls).
@@ -251,16 +344,60 @@ class Geo_Routing {
 				$ruleset_id = $loader->get_fallback_id();
 			}
 
+			// The VPN lookup was wanted and could not be had: ipinfo refused,
+			// was unreachable, or the hourly lookup budget is spent. The
+			// resolver above was told "not a VPN", which nobody established.
+			// Where that leads to an opt-in rule set nothing is lost. Where it
+			// leads to an opt-out one, a visitor from an opt-in jurisdiction
+			// whose VPN exits there would get a notice instead of a choice —
+			// the very case the lookup exists for — so the unknown is resolved
+			// the way every other geo failure is: the most-protective
+			// fallback. The model test is Geo_Runtime::model_to_law()'s prefix
+			// rule (every shipped opt-out rule set is
+			// 'opt-out-with-sensitive-opt-in'); 'hybrid' already maps to the
+			// opt-in side there.
+			//
+			// protective_ruleset() cannot fail: when the fallback file itself
+			// cannot be loaded it answers with a built-in opt-in copy, so the
+			// opt-out rule set never survives a failed replacement.
+			$vpn_unverified       = ! empty( $geo['vpn_unverified'] );
+			$replaced_by_fallback = false;
+			if ( $vpn_unverified && self::is_opt_out_ruleset( $ruleset ) ) {
+				list( $ruleset, $ruleset_id ) = self::protective_ruleset( $loader );
+				$replaced_by_fallback         = true;
+			}
+
 			// L2-SP1-S004 fix (1.15.0): apply per-country delta override
 			// at materialization time. Without this, admins setting
 			// `signals.cmv2.ad_storage=denied` in the override editor
 			// would see the value persisted but never reflected at
 			// runtime — the operator intent would silently no-op.
+			//
+			// A country's deltas were written for that country's own rule set.
+			// When the unverified VPN state has just replaced it with the
+			// fallback they are skipped: a US delta that pre-grants a category
+			// (as the opt-out rule sets do by default) would otherwise grant it
+			// before consent in the opt-in regime the replacement exists for.
 			$country = isset( $geo['country'] ) ? $geo['country'] : '';
-			if ( '' !== $country && isset( $overrides[ $country ]['delta'] ) && is_array( $overrides[ $country ]['delta'] ) && is_array( $ruleset ) ) {
+			if ( ! $replaced_by_fallback && '' !== $country && isset( $overrides[ $country ]['delta'] ) && is_array( $overrides[ $country ]['delta'] ) && is_array( $ruleset ) ) {
 				foreach ( $overrides[ $country ]['delta'] as $dot_path => $value ) {
 					$ruleset = self::apply_delta( $ruleset, (string) $dot_path, $value );
 				}
+			}
+
+			// The deltas run after the replacement above, and `model` is a
+			// field like any other to them: a saved `model` delta would turn
+			// the fallback back into an opt-out rule set (or turn an opt-in
+			// country's own rule set into one). So the guarantee is checked on
+			// what is actually returned. Model deltas are not refused at save
+			// time instead, because they have a legitimate use (moving a
+			// country to 'opt-in' while keeping the rest of its rule set), and
+			// a save-time rule would not reach an option that is already
+			// stored or was written without the REST sanitizer. The
+			// replacement is the fallback WITHOUT the deltas: they are what
+			// made the result opt-out.
+			if ( $vpn_unverified && self::is_opt_out_ruleset( $ruleset ) ) {
+				list( $ruleset, $ruleset_id ) = self::protective_ruleset( $loader );
 			}
 
 			return array(
@@ -268,6 +405,7 @@ class Geo_Routing {
 				'region'     => isset( $geo['region'] ) ? $geo['region'] : '',
 				'vpn'        => isset( $geo['vpn'] ) ? $geo['vpn'] : null,
 				'source'     => isset( $geo['source'] ) ? $geo['source'] : 'unknown',
+				'vpn_unverified' => $vpn_unverified,
 				'ruleset_id' => $ruleset_id,
 				'ruleset'    => $ruleset,
 			);

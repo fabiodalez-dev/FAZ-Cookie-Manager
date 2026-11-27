@@ -405,6 +405,40 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 						</td>
 					</tr>
 				<?php endif; ?>
+				<?php
+				// The Do Not Sell form honours every opt-out, but bounds the
+				// consent-log rows it writes (one per address per minute, one per
+				// second site-wide where the address identifies nobody). An
+				// opt-out applied without a row of its own is counted, and this
+				// is the only place that count is shown: without it the register
+				// of opt-out requests is short by a number nobody can name.
+				$faz_dns_unlogged      = \FazCookie\Includes\Do_Not_Sell_Shortcode::unlogged_tally( 30 );
+				$faz_dns_unlogged_days = (int) \FazCookie\Includes\Do_Not_Sell_Shortcode::UNLOGGED_RETENTION_DAYS;
+				?>
+				<tr>
+					<td><?php esc_html_e( 'Do Not Sell Requests Without a Log Row', 'faz-cookie-manager' ); ?></td>
+					<td>
+						<?php
+						printf(
+							/* translators: 1: number of opt-outs, 2: number of withdrawals, both in the last 30 days and already formatted for the locale. */
+							esc_html__( 'Last 30 days: %1$s opt-outs, %2$s withdrawals.', 'faz-cookie-manager' ),
+							esc_html( number_format_i18n( (int) $faz_dns_unlogged['recent_optout'] ) ),
+							esc_html( number_format_i18n( (int) $faz_dns_unlogged['recent_rescind'] ) )
+						);
+						echo ' ';
+						printf(
+							/* translators: 1: number of opt-outs, 2: number of withdrawals, 3: how long the counters are kept, in days; all already formatted for the locale. */
+							esc_html__( 'Whole record (%3$s days): %1$s opt-outs, %2$s withdrawals.', 'faz-cookie-manager' ),
+							esc_html( number_format_i18n( (int) $faz_dns_unlogged['optout'] ) ),
+							esc_html( number_format_i18n( (int) $faz_dns_unlogged['rescind'] ) ),
+							esc_html( number_format_i18n( $faz_dns_unlogged_days ) )
+						);
+						?>
+						<div class="faz-help">
+							<?php esc_html_e( 'Every one of these requests was applied: the visitor received (or lost) the opt-out cookie. What they did not get is a consent-log row and an admin email of their own, because another request from the same address had been logged in the previous 60 seconds, or, where the visitor address cannot be told apart (an undeclared proxy, a private or loopback peer), another request anywhere on the site in the same second. Counted per UTC day; the figure also includes replays and double submissions from one browser, so it is an upper bound on the people concerned.', 'faz-cookie-manager' ); ?>
+						</div>
+					</td>
+				</tr>
 				<tr><td><?php esc_html_e( 'Google Consent Mode', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $gcm_settings['status'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'IAB TCF v2.3', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['iab']['enabled'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'Pageview Tracking', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['pageview_tracking'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>

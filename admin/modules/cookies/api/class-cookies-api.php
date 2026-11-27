@@ -574,9 +574,14 @@ class Cookies_API extends API_Controller {
 					'context'     => array( 'view', 'edit' ),
 				),
 				'url_pattern'    => array(
-					'description' => __( 'URL patterns for blocking purposes', 'faz-cookie-manager' ),
-					'type'        => 'string',
-					'context'     => array( 'view', 'edit' ),
+					'description'       => __( 'URL patterns for blocking purposes', 'faz-cookie-manager' ),
+					'type'              => 'string',
+					'context'           => array( 'view', 'edit' ),
+					// rest_get_endpoint_args_for_schema() copies a custom
+					// callback only from arg_options.
+					'arg_options'       => array(
+						'validate_callback' => array( __CLASS__, 'validate_url_pattern_field' ),
+					),
 				),
 				'transfer'       => array(
 					'description'       => __( 'Third-country (Schrems II) personal-data transfer disclosure for this cookie.', 'faz-cookie-manager' ),
@@ -675,6 +680,22 @@ class Cookies_API extends API_Controller {
 				continue;
 			}
 			$editable_keys[] = $key;
+		}
+
+		// The route takes one `cookies` array, so the per-field arg_options of
+		// the item schema never run here: without this pass a too-broad
+		// url_pattern ("/", "js") was saved through bulk-update although the
+		// single-item routes refuse it and the frontend then ignores it. Every
+		// item is checked before the first save(), so a refused value leaves
+		// the whole batch unwritten instead of half of it.
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) || ! array_key_exists( 'url_pattern', $item ) || ! is_scalar( $item['url_pattern'] ) ) {
+				continue;
+			}
+			$valid = self::validate_url_pattern_field( $item['url_pattern'], $request, 'url_pattern' );
+			if ( is_wp_error( $valid ) ) {
+				return $valid;
+			}
 		}
 
 		$updated = array();
@@ -1292,6 +1313,33 @@ class Cookies_API extends API_Controller {
 			);
 		}
 		return (string) $value;
+	}
+
+	/**
+	 * Refuse a script URL pattern too broad to name one script.
+	 *
+	 * @param mixed           $value   Submitted value.
+	 * @param WP_REST_Request $request Request.
+	 * @param string          $param   Parameter name.
+	 * @return true|WP_Error
+	 */
+	public static function validate_url_pattern_field( $value, $request = null, $param = 'url_pattern' ) {
+		$valid = rest_validate_request_arg( $value, $request, $param );
+		if ( true !== $valid ) {
+			return $valid;
+		}
+		// Judged as it will be stored: Cookie::set_url_pattern() runs
+		// sanitize_text_field(), which drops percent-encoded octets, so
+		// "js%20%20" passed a check on the raw value and was saved as "js",
+		// a pattern the frontend then ignores.
+		if ( Cookie::is_too_broad_url_pattern( sanitize_text_field( (string) $value ) ) ) {
+			return new WP_Error(
+				'faz_url_pattern_too_broad',
+				__( 'The script URL pattern is too short: it would match almost every script on the site. Use a distinctive part of the script\'s URL, such as the provider\'s domain, or leave it empty.', 'faz-cookie-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+		return true;
 	}
 
 	/**

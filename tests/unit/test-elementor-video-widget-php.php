@@ -104,6 +104,27 @@ if ( ! function_exists( 'get_transient' ) ) {
 			return true;
 		}
 	}
+	// WP Maps keeps its settings in one option; the gate answer reads its
+	// site-wide map provider from there.
+	if ( ! function_exists( 'get_option' ) ) {
+		function get_option( $key, $default = false ) {
+			return array_key_exists( $key, $GLOBALS['__faz_options'] ?? array() ) ? $GLOBALS['__faz_options'][ $key ] : $default;
+		}
+	}
+	if ( ! function_exists( 'wp_unslash' ) ) {
+		function wp_unslash( $value ) {
+			return is_string( $value ) ? stripslashes( $value ) : $value;
+		}
+	}
+	if ( ! function_exists( 'maybe_unserialize' ) ) {
+		function maybe_unserialize( $data ) {
+			if ( is_string( $data ) && preg_match( '/^a:\d+:\{/', $data ) ) {
+				$value = @unserialize( $data, array( 'allowed_classes' => false ) );
+				return false === $value ? $data : $value;
+			}
+			return $data;
+		}
+	}
 	if ( ! function_exists( 'wp_strip_all_tags' ) ) {
 		function wp_strip_all_tags( $str ) {
 			return trim( preg_replace( '/<[^>]*>/', '', (string) $str ) );
@@ -594,6 +615,41 @@ if ( ! function_exists( 'get_transient' ) ) {
 	$GLOBALS['__faz_filters'] = array();
 	faz_set_prop( $gate, 'template', null );
 	assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), false, 'WP Maps gate: left alone where FAZ shows no banner' );
+
+	// 1.40.0 compliance review L2. WP Maps' gate sits in front of BOTH map
+	// engines (wpgmp_register_map_assets() returns before its provider branch),
+	// and the engine is one site-wide setting, wpgmp_settings[wpgmp_map_source].
+	// FAZ parks only the Google API: in Leaflet mode the loader is a local
+	// script and the tiles come from whichever host the site picked, so a
+	// "handled" there released every map before consent. The answer is yes only
+	// where WP Maps is in Google mode.
+	faz_set_prop( $gate, 'template', array( 'html' => '<div></div>' ) );
+	$GLOBALS['__faz_ctx'] = array();
+	foreach ( array(
+		'no WP Maps settings saved (Google is its default)' => array( null, true ),
+		'the provider set to google'                         => array( array( 'wpgmp_map_source' => 'google' ), true ),
+		'settings without a provider key'                    => array( array( 'wpgmp_gdpr' => true ), true ),
+		'the provider set to openstreet (Leaflet)'           => array( array( 'wpgmp_map_source' => 'openstreet' ), false ),
+		'any provider other than google'                     => array( array( 'wpgmp_map_source' => 'leaflet' ), false ),
+		'Leaflet settings stored serialized'                 => array( serialize( array( 'wpgmp_map_source' => 'openstreet' ) ), false ),
+		'Google settings stored serialized'                  => array( serialize( array( 'wpgmp_map_source' => 'google' ) ), true ),
+	) as $label => $case ) {
+		$GLOBALS['__faz_options'] = null === $case[0] ? array() : array( 'wpgmp_settings' => $case[0] );
+		assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), $case[1], "WP Maps gate: with {$label}, answered " . ( $case[1] ? 'true' : 'with WP Maps\' own no' ) );
+	}
+	$GLOBALS['__faz_options'] = array( 'wpgmp_settings' => array( 'wpgmp_map_source' => 'openstreet' ) );
+	assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( true ) ), true, 'WP Maps gate: in Leaflet mode WP Maps\' own yes still stands' );
+	// WP Maps lets a request override the provider (wpgmp_get_map_provider()
+	// reads $_POST first): FAZ does not vouch for a request it cannot place.
+	$GLOBALS['__faz_options'] = array( 'wpgmp_settings' => array( 'wpgmp_map_source' => 'google' ) );
+	$_POST['wpgmp_map_source'] = 'openstreet';
+	assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), false, 'WP Maps gate: a request that switches the provider to Leaflet is not vouched for' );
+	$_POST['wpgmp_map_source'] = 'google';
+	assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), true, 'WP Maps gate: a request naming google on a Google site is still handled' );
+	$GLOBALS['__faz_options'] = array( 'wpgmp_settings' => array( 'wpgmp_map_source' => 'openstreet' ) );
+	assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), true, 'WP Maps gate: a request that switches a Leaflet site to google gets the Google map FAZ parks' );
+	unset( $_POST['wpgmp_map_source'] );
+	$GLOBALS['__faz_options'] = array();
 
 	echo "\n";
 	echo "  Passed: {$tests_passed}\n";

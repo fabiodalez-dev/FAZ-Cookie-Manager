@@ -300,6 +300,65 @@ class Gcm_Settings extends Store {
 	}
 
 	/**
+	 * Whether the frontend must emit Consent Mode signals (gcm.js: the denied
+	 * `consent default` and the `consent update` on the visitor's choice).
+	 *
+	 * True with GCM on, and also with GCM off as soon as the plugin loads a
+	 * Google tag of its own (#366). Google treats a tag that runs without a
+	 * consent default as fully granted, so a visitor who accepted Analytics
+	 * alone would have every ad signal read as granted by the GT-/G- tag the
+	 * plugin itself printed (Ads destinations linked to it, Google Signals).
+	 * A tag the plugin loads therefore always comes with the signals; the GCM
+	 * switch keeps deciding everything else, Advanced mode included, so with
+	 * GCM off the built-in tags still wait for consent.
+	 *
+	 * @return boolean
+	 */
+	public function sends_consent_signals() {
+		return (bool) $this->get( 'status' ) || ! empty( $this->get_google_tag_ids() );
+	}
+
+	/**
+	 * Whether the signals are sent for the built-in Google tag alone, with
+	 * Google Consent Mode itself switched off.
+	 *
+	 * In that mode there are no admin-chosen Consent Mode defaults to honour,
+	 * so gcm.js makes the state follow the banner's own pre-consent state.
+	 * The denied default alone left an opt-out (CCPA) visitor who never
+	 * touched the notice denied for the whole visit, while the banner had
+	 * released the tag for them.
+	 *
+	 * @return boolean
+	 */
+	public function sends_signals_only() {
+		return ! (bool) $this->get( 'status' ) && $this->sends_consent_signals();
+	}
+
+	/**
+	 * The gcm.js payload for signals-only mode: the stored Consent Mode
+	 * settings replaced by the shipped defaults.
+	 *
+	 * With Google Consent Mode switched off the GCM page tells the admin that
+	 * everything is denied by default, but the stored settings survive the
+	 * switch: a region row set to "granted", URL passthrough, ads data
+	 * redaction, the non-personalised-ads fallback or Google Additional
+	 * Consent saved while GCM was on would silently take effect again as soon
+	 * as a built-in Google tag made the plugin load gcm.js. In this mode the
+	 * state follows the banner's own pre-consent state over a fully denied
+	 * default, so none of those choices may apply.
+	 *
+	 * @param array $settings Stored settings as returned by get().
+	 * @return array
+	 */
+	public function signals_only_payload( array $settings ) {
+		$defaults = $this->get_defaults();
+		foreach ( array( 'default_settings', 'wait_for_update', 'url_passthrough', 'ads_data_redaction', 'gacm_enabled', 'gacm_provider_ids', 'non_personalized_ads_fallback' ) as $key ) {
+			$settings[ $key ] = $defaults[ $key ];
+		}
+		return $settings;
+	}
+
+	/**
 	 * The built-in Google tag IDs (#366), validated.
 	 *
 	 * @return string[]

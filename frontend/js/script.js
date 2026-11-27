@@ -6798,8 +6798,9 @@ function _fazDecodeCharRefs(text) {
  * parser may read <style> content as markup: there a sheet is rewritten only
  * when no "<" in its content opens markup, where both readings give the same tokens, and the walk
  * stops at anything else. It also stops at script data that may enter the double-escaped state ("<!--" then "<script") and at
- * anything unterminated. Where it stops, the rest of the string is returned
- * unchanged: an unparked sheet is a missed block, a misread one is live markup.
+ * anything unterminated. Where it stops, no tag of the rest is rewritten (a
+ * misread sheet is live markup) and the rest goes to `tailFn`, which decides
+ * what it becomes; without one it is returned unchanged.
  *
  * `noScripting` is for markup parsed in a document without a window (a
  * DOMParser or createHTMLDocument document, a <template>'s content). The
@@ -6813,10 +6814,11 @@ function _fazDecodeCharRefs(text) {
  * @param {function(string, string, string): string} fn
  * @param {boolean=} uncertain
  * @param {boolean=} noScripting
+ * @param {function(string): string=} tailFn
  * @returns {string}
  */
-function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
-    var s = String(html), n = s.length, out = "", last = 0, i = 0;
+function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting, tailFn) {
+    var s = String(html), n = s.length, out = "", last = 0, i = 0, stop = -1;
     uncertain = !!uncertain;
     var RAW = { style: 1, script: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1, textarea: 1, title: 1 };
 
@@ -6867,7 +6869,7 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
                 if (s.charAt(k + 2) === ">") { cend = k + 3; break; }
                 if (s.charAt(k + 2) === "!" && s.charAt(k + 3) === ">") { cend = k + 4; break; }
             }
-            if (cend === -1) break;
+            if (cend === -1) { stop = lt; break; }
             i = cend; continue;
         }
         if (c === "!") {
@@ -6876,7 +6878,7 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
             // ">" is the one closing "]]>".
             if (uncertain && s.substr(lt, 9) === "<![CDATA[") {
                 var cd = s.indexOf("]]>", lt + 9);
-                if (cd === -1 || s.indexOf(">", lt + 2) !== cd + 2) break;
+                if (cd === -1 || s.indexOf(">", lt + 2) !== cd + 2) { stop = lt; break; }
                 i = cd + 3; continue;
             }
             i = toGt(lt + 2); continue;
@@ -6887,12 +6889,12 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
             if (c2 === ">") { i = lt + 3; continue; }
             if (!isAlpha(c2)) { i = toGt(lt + 2); continue; }
             var etag = scanTag(lt + 2);
-            if (!etag) break;
+            if (!etag) { stop = lt; break; }
             i = etag.end; continue;
         }
         if (!isAlpha(c)) { i = lt + 1; continue; }
         var tag = scanTag(lt + 1);
-        if (!tag) break;
+        if (!tag) { stop = lt; break; }
         // From an <svg>/<math> start tag on, the parser may be in foreign
         // content, where <style> and the RAWTEXT/RCDATA elements parse their
         // content as markup; and where foreign content ends depends on the
@@ -6905,22 +6907,22 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
             if (!tag.selfClosing || tag.name === "select" || tag.name === "frameset") uncertain = true;
             i = tag.end; continue;
         }
-        if (tag.name === "plaintext") break;
-        if (noScripting && tag.name === "noscript") break;
+        if (tag.name === "plaintext") { stop = lt; break; }
+        if (noScripting && tag.name === "noscript") { stop = lt; break; }
         // Own properties only: a "<constructor>" start tag would read a
         // truthy value from Object.prototype and hide a following <style>.
         if (!Object.prototype.hasOwnProperty.call(RAW, tag.name)) { i = tag.end; continue; }
         var re = new RegExp("</" + tag.name + "(?=[\\t\\n\\f\\r />])", "ig");
         re.lastIndex = tag.end;
         var m = re.exec(s);
-        if (!m) break;
+        if (!m) { stop = lt; break; }
         var body = s.slice(tag.end, m.index);
         // "<!--" in script data enters the escaped states. There the first
         // "</script" still ends the script, unless a "<script" start after
         // the "<!--" entered the double-escaped state, where it does not:
         // only then is the real end unknown, and the walk stops.
         var esc = tag.name === "script" ? body.indexOf("<!--") : -1;
-        if (esc !== -1 && /<script[\t\n\f\r \/>]/i.test(body.slice(esc))) break;
+        if (esc !== -1 && /<script[\t\n\f\r \/>]/i.test(body.slice(esc))) { stop = lt; break; }
         // Where the element may be foreign (or an ignored tag), its content is
         // markup. A "<" opens a tag, an end tag, a comment or a bogus comment
         // there only before an ASCII letter, "/", "!" or "?"; any other "<" is
@@ -6928,9 +6930,9 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
         // "<", markup and RAWTEXT/RCDATA give the same text up to the same end
         // tag; with one they may not, and a self-closing start tag ends a
         // foreign element right there.
-        if (uncertain && (tag.selfClosing || /<[A-Za-z!\/?]/.test(body))) break;
+        if (uncertain && (tag.selfClosing || /<[A-Za-z!\/?]/.test(body))) { stop = lt; break; }
         var endTag = scanTag(m.index + 2);
-        if (!endTag) break;
+        if (!endTag) { stop = lt; break; }
         // "&" is literal in RAWTEXT and a character reference in markup, so
         // where the element may be foreign the text parked as its original
         // can differ from the live one by a decoded reference. The structure
@@ -6948,7 +6950,135 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
         }
         i = endTag.end;
     }
+    // The walk gave up at `stop`, and what follows was not read. It is not
+    // handed on as it is when it may still hold a sheet: `tailFn` decides
+    // what the unread rest becomes (see _fazHoldUnreadStyleTail()).
+    if (stop !== -1 && typeof tailFn === "function") {
+        var tail = s.slice(stop);
+        var kept = tailFn(tail);
+        if (kept !== tail) return out + s.slice(last, stop) + kept;
+    }
     return last === 0 ? s : out + s.slice(last);
+}
+
+// What a URL the markup gate holds in an unread tail starts with. An about:
+// URL is never fetched, and everything after the "#" is its fragment, so the
+// original URL stays in the text, untouched, for the restore pass to give
+// back. Letters, ":", "#" and "-" only: see _fazHoldCssUrlsInPlace().
+var _FAZ_HELD_CSS_URL = "about:invalid#faz-held:";
+
+/**
+ * Whether `text` still names a URL of a blocked provider that the CSS engine
+ * could fetch: the question _fazCssShouldBlock() asks, minus the URLs already
+ * held, and asked a second time on the text with its character references
+ * decoded, because in foreign content the parser decodes them inside a sheet
+ * ("&#47;&#47;tracker" is "//tracker" there).
+ */
+function _fazUnreadTailFetches(text) {
+    function fetches(css) {
+        var urls = _fazCssUrls(css);
+        for (var i = 0; i < urls.length; i++) {
+            var url = _fazCssDecodeEscapes(String(urls[i])).replace(/^\s+/, "").toLowerCase();
+            if (url.indexOf(_FAZ_HELD_CSS_URL) === 0) continue;
+            if (_fazCssUrlShouldBlock(urls[i])) return true;
+        }
+        return false;
+    }
+    if (fetches(text)) return true;
+    if (text.indexOf("&") === -1) return false;
+    // _fazDecodeCharRefs() takes text with no "<" that opens markup.
+    var decoded = _fazDecodeCharRefs(text.replace(/</g, "&lt;"));
+    return decoded !== text && fetches(decoded);
+}
+
+/**
+ * Hold the blocked url() and @import "…" tokens of `text` by writing
+ * _FAZ_HELD_CSS_URL in front of the URL. Nothing is removed and nothing else
+ * is written.
+ *
+ * `text` is markup nobody could tokenize, so a token found here may sit in a
+ * sheet, in an attribute value, in a comment or in a tag. The form
+ * _fazNeutralizeCssUrls() writes (url("data:…") in place of the token) cannot
+ * be used: a quote added, or one removed with the URL it was part of, moves
+ * the place where an attribute value ends, and text a page script had
+ * sanitised becomes an attribute (mutation XSS). An insertion of characters
+ * the HTML tokenizer treats alike in every state it can be in after "(", a
+ * quote or a space does not have that effect, as long as the character that
+ * follows is ordinary too: the tokenizer is in the same state before and
+ * after the inserted run, and reads the rest exactly as it did. Hence the
+ * test on the URL's first character; "=" or a space there (the two that mean
+ * something after a closing attribute quote) is left alone, and so is a URL
+ * that starts with a CSS escape. What is left alone and still fetches is
+ * dealt with by the caller.
+ */
+function _fazHoldCssUrlsInPlace(text) {
+    function hold(url) { return /^[A-Za-z0-9\/.]/.test(url) && _fazCssUrlShouldBlock(url); }
+    var out = text.replace(/(url\(\s*)("[^"]*"|'[^']*'|[^\)\s]+)(?=\s*\))/gi, function (match, open, body) {
+        var q = body.charAt(0);
+        if (q === '"' || q === "'") {
+            var url = body.slice(1, -1);
+            return hold(url) ? open + q + _FAZ_HELD_CSS_URL + url + q : match;
+        }
+        return hold(body) ? open + _FAZ_HELD_CSS_URL + body : match;
+    });
+    return out.replace(/(@import\s*)(["'])([^"']+)\2/gi, function (match, prefix, q, url) {
+        return hold(url) ? prefix + q + _FAZ_HELD_CSS_URL + url + q : match;
+    });
+}
+
+/**
+ * What becomes of the rest of a markup string once _fazRewriteRealStyleTags()
+ * has stopped reading it.
+ *
+ * It used to be handed to the parser as it was: "an unparked sheet is a
+ * missed block, a misread one is live markup". The first half of that is a
+ * tracker loading before consent — `<svg><style><![CDATA[…]]></style></svg>`
+ * followed by `<style>@import url(tracker)</style>` in one innerHTML, or just
+ * a <style> with no end tag, which the parser closes at the end of the
+ * string. Parking those sheets the usual way (data-faz-css on the tag) would
+ * mean rewriting markup that was not read, which is the second half.
+ *
+ * So, from the first "<style" of the rest on, and only when a blocked URL can
+ * be read out of it:
+ *   1. the URLs are held in place (_fazHoldCssUrlsInPlace()), which keeps the
+ *      page content around the sheet and cannot change what the parser builds;
+ *   2. if something still fetches after that — a spelling the in-place pass
+ *      does not reach (an escape, a comment inside the token, image-set(), a
+ *      character reference, a url( left open) — the string is cut short at a
+ *      "<style": the latest one that leaves nothing fetchable in what is
+ *      kept, so the page loses as little as it can. Cutting a string short
+ *      cannot make any of it live, and no sheet of the part that is dropped
+ *      reaches the engine.
+ * A rest with no "<style" in it, or with no blocked URL, is returned as it
+ * was. A held sheet, and a style="…" attribute the hold reached in the same
+ * rest, are given back by _fazUnblockServerSide() on consent.
+ *
+ * @param {string} tail
+ * @returns {string}
+ */
+function _fazHoldUnreadStyleTail(tail) {
+    if (!_fazStore._block || typeof tail !== "string") return tail;
+    var at = tail.search(/<style(?=[\t\n\f\r \/>])/i);
+    if (at === -1) return tail;
+    var region = tail.slice(at);
+    try {
+        if (!_fazUnreadTailFetches(region)) return tail;
+        var held = _fazHoldCssUrlsInPlace(region);
+        if (!_fazUnreadTailFetches(held)) return tail.slice(0, at) + held;
+        // Every "<style" is a place to cut; the first one is `at` itself,
+        // which keeps nothing of the region and always answers. Only the
+        // last few are tried: each try reads the text again.
+        var cuts = [], re = /<style(?=[\t\n\f\r \/>])/gi, m;
+        while ((m = re.exec(held))) cuts.push(m.index);
+        for (var k = cuts.length - 1; k > 0 && k >= cuts.length - 8; k--) {
+            var keep = held.slice(0, cuts[k]);
+            if (!_fazUnreadTailFetches(keep)) return tail.slice(0, at) + keep;
+        }
+        return tail.slice(0, at);
+    } catch (e) {
+        // A judgement that could not be made is a refusal.
+        return tail.slice(0, at);
+    }
 }
 
 /**
@@ -6988,7 +7118,7 @@ function _fazPrepareStyleHtmlString(html, context) {
     if (mode === "text") return html;
     return _fazRewriteRealStyleTags(html, function (full, attrs, css, live) {
         try { return _fazPrepareStyleTagHtml(full, attrs || "", css || "", live); } catch (e) { return full; }
-    }, mode !== "html", _fazScriptingDisabledFor(context));
+    }, mode !== "html", _fazScriptingDisabledFor(context), _fazHoldUnreadStyleTail);
 }
 
 function _fazGateHtmlStyleStringSetter(proto, prop) {
@@ -8208,6 +8338,61 @@ function _fazUnblockServerSide() {
             el.textContent = css;
         });
 
+    // 4b-bis. Sheets the markup gate could not read and held in place
+    // (_fazHoldUnreadStyleTail): no marker on the element, the original URL
+    // still in the text behind _FAZ_HELD_CSS_URL. Same rule as 4b, and the
+    // text goes back through the gated setter, which decides again.
+    //
+    // Not tied to the "Advanced inline CSS URL blocking" option, like 4b. The
+    // option decides whether THIS file gates markup strings; the bootstrap
+    // does not read it, and on its safety release (holdUnreadStyleTail() in
+    // bootstrap.js) it holds a cross-origin URL the same way on every site,
+    // because it has neither the rules nor a decision to do anything else
+    // with. A runtime that arrives after that release takes over (finish(),
+    // the `late` branch), and with the option off this pass used to be
+    // skipped: the held sheet stayed inert after the visitor accepted, until
+    // the next page load. Whoever wrote the marker, what it holds is given
+    // back by the rule below.
+    //
+    // A sheet that also carries data-faz-css is left to 4b. That happens when
+    // a held sheet later took a blocked append(): the attribute then holds the
+    // original of the WHOLE sheet, the held text included, while the live
+    // text carries the appended URL already neutralised. Reading the live
+    // text here after consent to the held URL alone, and writing it back,
+    // dropped the attribute with the only copy of the appended original, so
+    // a later consent to it had nothing to give back. 4b restores the sheet
+    // once every URL in that original is allowed, and the marker it brings
+    // back with it is stripped by this pass on the same run, which comes
+    // after 4b.
+    document.querySelectorAll('style')
+        .forEach(function (el) {
+            if (el.hasAttribute("data-faz-css")) return;
+            var live = el.textContent || "";
+            if (live.indexOf(_FAZ_HELD_CSS_URL) === -1) return;
+            var css = live.split(_FAZ_HELD_CSS_URL).join("");
+            if (_fazCssShouldBlock(css)) return;
+            el.textContent = css;
+        });
+    // The same hold in a style="…" attribute. The rest it was applied to
+    // was never tokenized, so _fazHoldCssUrlsInPlace() cannot tell a sheet
+    // from an attribute value and holds a blocked url() in both. That is
+    // kept: limiting the hold to the text between "<style" and "</style"
+    // would need the very reading the walk gave up on (in foreign content
+    // a CDATA section carries "</style" as text and the sheet goes on
+    // after it), and a URL left unheld only because of where it seemed to
+    // be is the leak the hold exists to close. What was missing is this
+    // half: an element kept "about:invalid#faz-held:" in its inline style
+    // after consent, until the next page load. Same rule as above, the
+    // declarations go back only when no URL in them is still blocked.
+    document.querySelectorAll('[style*="faz-held:"]')
+        .forEach(function (el) {
+            var live = el.getAttribute("style") || "";
+            if (live.indexOf(_FAZ_HELD_CSS_URL) === -1) return;
+            var css = live.split(_FAZ_HELD_CSS_URL).join("");
+            if (_fazCssShouldBlock(css)) return;
+            el.setAttribute("style", css);
+        });
+
     // 4c. Inline `style` ATTRIBUTES the server neutralised (process_style_attr_tag
     // in class-frontend.php): the original declarations live in data-faz-style
     // and the live attribute carries the neutralised copy — or nothing, when a
@@ -8516,7 +8701,13 @@ function _fazIsCategoryToBeBlocked(category) {
 var _fazPatternServiceMap = null;
 function _fazGetPatternServiceMap() {
     if (_fazPatternServiceMap) return _fazPatternServiceMap;
-    _fazPatternServiceMap = {};
+    // No prototype: the keys are patterns an administrator typed, and one
+    // spelled like an Object.prototype member ("constructor", "toString")
+    // read as an inherited function on a plain object. The build then called
+    // indexOf on it and threw, the half-built map stayed cached, and every
+    // later lookup of such a key (psMap[re] || []).slice() threw as well,
+    // aborting the consent decision for the script being judged.
+    _fazPatternServiceMap = Object.create(null);
     if (!_fazStore._services) return _fazPatternServiceMap;
     _fazStore._services.forEach(function(svc) {
         if (!svc.patterns) return;
@@ -8528,6 +8719,25 @@ function _fazGetPatternServiceMap() {
         });
     });
     return _fazPatternServiceMap;
+}
+
+/**
+ * Hand-declared services (#360) that name `pattern` as the script setting
+ * their cookie. Read from _services, where the server lists them with
+ * `declared: true` and the row's url_pattern in `patterns`.
+ *
+ * @param {string} pattern A _providersToBlock `re` value.
+ * @return {string[]} Service ids, empty when no declared service owns it.
+ */
+function _fazGetDeclaredPatternOwners(pattern) {
+    if (!pattern) return [];
+    var owners = _fazGetPatternServiceMap()[pattern];
+    if (!owners || !owners.length || !Array.isArray(_fazStore._services)) return [];
+    return owners.filter(function (id) {
+        return _fazStore._services.some(function (svc) {
+            return svc && svc.id === id && svc.declared === true;
+        });
+    });
 }
 
 /*
@@ -8601,13 +8811,23 @@ function _fazGetServiceConsentForTarget(formattedRE) {
     var psMap = _fazGetPatternServiceMap();
     var hasExplicitYes = false;
     for (var pi = 0; pi < providers.length; pi++) {
-        // Prefer the service id carried on the matched _providersToBlock entry
-        // (present when per-service consent is on) so an embed of an
-        // enforceable-but-undetected provider — e.g. a clean server-allowed
-        // YouTube iframe after a reload, or a dynamically-injected one — resolves
-        // to its svc.<id> instead of being re-blocked under the denied category.
-        // Fall back to the scanner-detected pattern map otherwise. #134/#146.
-        var serviceIds = providers[pi].service ? [providers[pi].service] : (psMap[providers[pi].re] || []);
+        // Ask EVERY owner of the matched pattern. The _providersToBlock entry
+        // carries one service id only (the first owner the server met), so
+        // reading it alone let that owner's "yes" release a script a second
+        // owner of the same pattern had refused — two services on one booking
+        // widget, or a hand-declared cookie (#360) naming a pattern a
+        // catalogue provider also owns — while the server, which matches every
+        // owner of a pattern (check_per_service_blocking()), held the script
+        // on that "no". The pattern map lists the owners the page knows about.
+        var serviceIds = (psMap[providers[pi].re] || []).slice();
+        // The entry's own id is added because it can name an
+        // enforceable-but-undetected provider that is in no _services row — a
+        // clean server-allowed YouTube iframe after a reload, or a
+        // dynamically-injected one — which must still resolve to its svc.<id>
+        // instead of being re-blocked under the denied category. #134/#146.
+        if (providers[pi].service && serviceIds.indexOf(providers[pi].service) === -1) {
+            serviceIds.push(providers[pi].service);
+        }
         for (var si = 0; si < serviceIds.length; si++) {
             var svcConsent = _fazRef._fazGetFromStore("svc." + serviceIds[si]);
             if (svcConsent === "no") return "no";
@@ -8615,6 +8835,55 @@ function _fazGetServiceConsentForTarget(formattedRE) {
         }
     }
     return hasExplicitYes ? "yes" : "";
+}
+
+/**
+ * Whether a hand-declared service (#360) that names `target` as the script
+ * setting its cookie was explicitly refused.
+ *
+ * Asked before an element's own data-faz-service grant is accepted. That grant
+ * answers for the ONE service the element is tagged with; a declared service
+ * owning the same URL has no tag of its own to be read from, so its "no" was
+ * skipped by the early return and the script ran — while the server, matching
+ * by URL, kept it parked. Only declared owners are consulted here: between two
+ * catalogue providers the tag is what tells them apart (an Ads loader that also
+ * matches the Analytics pattern must not be held by the Analytics refusal).
+ *
+ * @param {string} target URL or inline content the element would load.
+ * @return {boolean}
+ */
+function _fazDeclaredOwnerRefusesTarget(target) {
+    if (!_fazStore._perServiceConsent) return false;
+    var providers = _fazMatchingProviders(target);
+    for (var pi = 0; pi < providers.length; pi++) {
+        var owners = _fazGetDeclaredPatternOwners(providers[pi].re);
+        for (var oi = 0; oi < owners.length; oi++) {
+            if (_fazRef._fazGetFromStore("svc." + owners[oi]) === "no") return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Whether the visitor refused a service that has a script pattern to block —
+ * an owner in the pattern map, or the id named on a _providersToBlock entry.
+ * While one is, the script interceptors still have something to hold even with
+ * every category granted.
+ *
+ * @return {boolean}
+ */
+function _fazAnyPatternServiceRefused() {
+    if (!_fazStore._perServiceConsent) return false;
+    var refused = function (id) {
+        return !!id && _fazRef._fazGetFromStore("svc." + id) === "no";
+    };
+    var psMap = _fazGetPatternServiceMap();
+    for (var pattern in psMap) {
+        if (Object.prototype.hasOwnProperty.call(psMap, pattern) && psMap[pattern].some(refused)) return true;
+    }
+    return Array.isArray(_fazStore._providersToBlock) && _fazStore._providersToBlock.some(function (provider) {
+        return !!provider && refused(provider.service);
+    });
 }
 
 /**
@@ -8718,6 +8987,15 @@ function _fazCategoryIsConfigured(slug) {
 function _fazShouldBlockScriptNode(node, category, target, serviceId) {
     var own = _fazOwnGoogleTagProvider(node);
     if (!own) return _fazShouldBlockResource(category, target, serviceId);
+    // A hand-declared service (#360) that names this URL and was refused holds
+    // the tag first, on every branch below: the parked copy, the released
+    // clone and, under Advanced Consent Mode, the live tag. The own-tag path
+    // reads its own provider's choice only, so that refusal was never asked
+    // and the restore queue released a script the visitor had switched off.
+    // Declared owners only, as for an element's own data-faz-service grant in
+    // _fazShouldBlockResource(): the catalogue google-analytics pattern also
+    // matches the Ads loader, and its refusal must not hold the Ads tag.
+    if (_fazDeclaredOwnerRefusesTarget(target)) return true;
     // The clone the restore queue just released (data-faz-executed): it was
     // judged with its full category before release, and
     // _fazBuildRestoredScript() then dropped data-faz-category. Re-deciding it
@@ -8748,7 +9026,9 @@ function _fazShouldBlockResource(category, target, serviceId) {
             // Mirrors the server-side get_enforceable_services() resolution. #134/#146.
             var explicit = _fazRef._fazGetFromStore("svc." + serviceId);
             if (explicit === "no") return true;
-            if (explicit === "yes") return false;
+            // The grant is for the tagged service alone: a declared service
+            // naming the same URL keeps its own refusal.
+            if (explicit === "yes" && !_fazDeclaredOwnerRefusesTarget(target)) return false;
         }
         var targetConsent = _fazGetServiceConsentForTarget(target);
         if (targetConsent === "no") return true;
@@ -9127,14 +9407,22 @@ function _fazShouldChangeType(element, src, typeOverride) {
     if (_fazStore._perServiceConsent && serviceId && _fazIsRecognizedService(serviceId)) {
         var explicit = _fazRef._fazGetFromStore("svc." + serviceId);
         if (explicit === "no") return true;
-        if (explicit === "yes") return false;
+        // As in _fazShouldBlockResource: the grant is for the tagged service
+        // alone, a declared service naming the same URL keeps its refusal.
+        if (explicit === "yes" && !_fazDeclaredOwnerRefusesTarget(url)) return false;
     }
+    // An explicit refusal of a service that owns this URL is read BEFORE the
+    // Advanced exemption, as _fazShouldBlockResource does. A dynamic gtag.js
+    // script carries no data-faz-service, so the check above never sees it and
+    // the exemption returned before _fazShouldBlockProvider() could ask its
+    // owners: the visitor's "no" to that Google service did not hold it.
+    if (_fazGetServiceConsentForTarget(url) === "no") return true;
     // Advanced Consent Mode (#165): let Consent-Mode-aware Google tags load
     // before consent (the synchronous denied `consent default` in <head> keeps
     // their pre-consent hits cookieless); mirrors the server-side
     // is_advanced_consent_exempt(). gtm.js stays blocked unless the site
     // owner opted the container in (#385).
-    // Placed AFTER the explicit per-service check above so an svc.<id>:no
+    // Placed AFTER the per-service checks above so an svc.<id>:no
     // (deliberate rejection of this Google service) still hard-blocks it.
     if (_fazIsAdvancedConsentExempt(url)) return false;
     // Tracker decision (also the exemption gate): block when the element's
@@ -9617,12 +9905,16 @@ function _fazAfterConsent() {
         return;
     }
 
-    // Clean up script interception if no categories remain blocked.
+    // Clean up script interception if nothing remains blocked.
     // Revocations always trigger a page reload above, so the interceptors
     // will be reinstated on the fresh page load if needed.
+    // A refused service with a script pattern keeps them too: a first save
+    // that grants every category and switches one service off revokes
+    // nothing, so no reload follows, and without the interceptors that
+    // service's script injected later would load unchecked.
     var anyBlocked = _fazStore._categories.some(
         function (cat) { return !cat.isNecessary && _fazIsCategoryToBeBlocked(cat.slug); }
-    );
+    ) || _fazAnyPatternServiceRefused();
     if (!anyBlocked) {
         _fazNodeListObserver.disconnect();
         document.createElement = _fazCreateElementBackup;

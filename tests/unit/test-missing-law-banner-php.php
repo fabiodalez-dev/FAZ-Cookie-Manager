@@ -162,6 +162,9 @@ namespace {
 		$settings['settings']['position']                = 'bottom-right';
 		$settings['settings']['theme']                   = 'dark';
 		$settings['settings']['consentExpiry']['value']  = 365;
+		// "Allow Close (X) alongside Reject" is the non-EU-only option a CCPA
+		// banner may legitimately have on.
+		$settings['settings']['allowCloseButtonWithReject'] = true;
 		$settings['config']['notice']['elements']['buttons']['elements']['accept']['styles']['background-color'] = '#AA0000';
 		$settings['config']['notice']['styles']['background-color'] = '#101010';
 		$contents = array( 'en' => array( 'notice' => array( 'elements' => array( 'title' => 'Opt out of the sale of your data' ) ) ) );
@@ -196,6 +199,11 @@ namespace {
 	mlb_assert( '#101010' === $config['notice']['styles']['background-color'], 'the notice keeps the banner\'s background' );
 	mlb_assert( 'bottom-right' === $banner->get_settings()['settings']['position'] && 'dark' === $banner->get_settings()['settings']['theme'], 'position and theme are the banner\'s' );
 	mlb_assert( (int) $gdpr['settings']['consentExpiry']['value'] === (int) $banner->get_settings()['settings']['consentExpiry']['value'], 'a 365-day consent lifetime is capped at the GDPR default' );
+	// The X next to Reject is the double dismissal the option keeps away from
+	// opt-in visitors ("Non-EU only"): Template::prepare_html() reads this
+	// setting to decide whether the close button survives beside Reject.
+	mlb_assert( true === mlb_ccpa_banner()->get_settings()['settings']['allowCloseButtonWithReject'], 'the CCPA banner under test allows the X alongside Reject' );
+	mlb_assert( false === $banner->get_settings()['settings']['allowCloseButtonWithReject'], 'the opt-in rendition does not keep the X alongside Reject' );
 	mlb_assert( array() === $banner->stored( 'contents' ), 'the opt-out text is dropped, so each language falls back to its GDPR catalogue' );
 	$catalogue = $banner->get_translations( 'en' );
 	mlb_assert( isset( $catalogue['notice']['elements']['buttons']['elements']['accept'] ) && '' !== (string) $catalogue['notice']['elements']['buttons']['elements']['accept'], 'that catalogue is the GDPR one, with an Accept label' );

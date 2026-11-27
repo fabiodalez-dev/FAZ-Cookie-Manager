@@ -61,7 +61,8 @@ namespace {
 		// exercise. The geo migration harness treats them as completed.
 		if ( in_array( $name, array( 'faz_necessary_disclosure_text_done', 'faz_move_divi_editor_internal_done' ), true )
 			&& ! array_key_exists( $name, $GLOBALS['faz_geo_options'] ) ) {
-			return 1;
+			// "Done" for the disclosure step is the revision it is at.
+			return 'faz_necessary_disclosure_text_done' === $name ? \FazCookie\Includes\Activator::DISCLOSURE_TEXT_REVISION : 1;
 		}
 		// Likewise the cookie-text unslash migration, driven for real by
 		// test-cookie-text-slashes-php.php.

@@ -707,6 +707,14 @@ class Template {
 				}
 				// Brand logo: set img src from config meta.url (custom upload).
 				if ( 'brand-logo' === $tag && isset( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
+					// The logo is in the notice itself, so it is requested on every
+					// first visit, before any choice. Only a logo this site serves
+					// is shown (see is_first_party_image_url()); for one on another
+					// host the logo is left out, not rendered as a broken image.
+					if ( ! self::is_first_party_image_url( esc_url_raw( (string) $config['meta']['url'], array( 'http', 'https' ) ) ) ) {
+						$element->parentNode->removeChild( $element ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
+						continue;
+					}
 					self::apply_brand_logo( $element, (string) $config['meta']['url'] );
 					// Only for a logo that is shown: with the logo off the grid
 					// would keep an empty column and strip the text's padding.
@@ -717,9 +725,17 @@ class Template {
 				// swaps the default icon for an inline SVG, and skips an image with
 				// this class whatever its URL says. The button already carries the
 				// accessible name, so the image needs no text of its own.
+				//
+				// Only an image this site serves itself. The widget is in the
+				// template of every page, first visit included, and a browser
+				// fetches an <img> as soon as it is in the document, shown or
+				// not: an image on another host would hand that host the
+				// visitor's address before any choice, and after a refusal too.
+				// Such a URL can only arrive past the editor (REST, import), whose
+				// picker offers the Media Library; the default icon stays.
 				if ( 'revisit-consent' === $tag && ! empty( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
 					$revisit_url = esc_url_raw( $config['meta']['url'], array( 'http', 'https' ) );
-					if ( '' !== $revisit_url ) {
+					if ( '' !== $revisit_url && self::is_first_party_image_url( $revisit_url ) ) {
 						foreach ( $element->getElementsByTagName( 'img' ) as $revisit_img ) {
 							$revisit_img->setAttribute( 'src', $revisit_url );
 							// Added to the classes already there: skip-lazy keeps lazy loaders off it.
@@ -890,6 +906,7 @@ class Template {
 			// there. The margin reset has to beat the box rules that push the
 			// first button down, and compact resets the margin to 0 as well.
 			. $c . ':where(.faz-box-pushdown) .faz-notice-btn-wrapper .faz-btn{flex:1 1 auto;}'
+			. self::box_pushdown_pair_rules()
 			. $c . '.faz-box-pushdown .faz-consent-bar .faz-notice-group .faz-notice-btn-wrapper .faz-btn{margin:0;}'
 			// The classic right-to-left rule indents the row by 15px for the
 			// inline categories beside it, which the box does not have.
@@ -907,6 +924,44 @@ class Template {
 			. $c . '.faz-box-bottom-left,' . $c . '.faz-box-top-left{left:0;}' . $c . '.faz-box-bottom-right,' . $c . '.faz-box-top-right{right:0;}'
 			. $open . ' .faz-preference-center{max-height:100vh;}}'
 			. '@media (max-width:440px){' . $box . '{width:100%;max-width:100%;}}';
+	}
+
+	/**
+	 * Rules that keep Accept and Reject the same width in a Box + Pushdown
+	 * above the phone layouts.
+	 *
+	 * The row wraps and `flex:1 1 auto` sizes each button from its label, so
+	 * three labels that do not fit the 390px the box leaves them broke the row
+	 * wherever the text happened to end. With the default order and the Italian
+	 * or German labels, or the English ones with the logo beside, Accept landed
+	 * alone on a second row at full width, twice as wide as Reject: the unequal
+	 * weight EDPB Guidelines 03/2022 rule out, decided by the translation.
+	 *
+	 * Here the layout is fixed instead of left to the labels. Customise, which
+	 * is not one of the compared choices, takes a row of its own, above or below
+	 * the pair as the chosen button order places it in the markup: every order
+	 * in Banner::BUTTON_ORDERS keeps Accept and Reject adjacent, so they always
+	 * share the other row. `flex:1 1 0` with `min-width:0` gives the two the
+	 * same width from one layout pass, whatever the labels are; a label too long
+	 * for half the row wraps instead of widening its button, and the stretched
+	 * row keeps both buttons the height of the taller one. The Do Not Sell
+	 * control, when a banner has it, would otherwise be let onto the pair's row
+	 * by their zero basis and squeeze them, so it takes a full row as well.
+	 *
+	 * From 577px up only: below that markup_order_mobile_css() gives every
+	 * button a full row and the compact layout sizes the row itself, and both
+	 * are left as they are. `:where()` keeps the specificity of the rule these
+	 * follow.
+	 *
+	 * @return string
+	 */
+	private static function box_pushdown_pair_rules() {
+		$row = '.faz-consent-container:where(.faz-box-pushdown) .faz-notice-btn-wrapper';
+		return '@media (min-width:577px){'
+			. $row . '{align-items:stretch;}'
+			. $row . ' .faz-btn-accept,' . $row . ' .faz-btn-reject{flex:1 1 0;min-width:0;display:inline-flex;align-items:center;justify-content:center;white-space:normal;overflow-wrap:break-word;}'
+			. $row . ' .faz-btn-customize,' . $row . ' [data-faz-tag=donotsell-button]{flex:1 1 100%;}'
+			. '}';
 	}
 
 	/**
@@ -956,8 +1011,16 @@ class Template {
 	 */
 	public static function apply_brand_logo( $element, $url ) {
 		$logo_alt = self::brand_logo_alt( $url );
+		// The URL is sanitised as the revisit widget image is (esc_url_raw()
+		// is esc_url() in the 'db' context), not escaped for display: the DOM
+		// escapes the attribute itself when the template is saved. A display
+		// escape here turned each `&` into `&#038;` first, the DOM then wrote
+		// `&amp;#038;`, and a signed CDN URL (`?X-Amz-Expires=…&X-Amz-Signature=…`)
+		// reached the browser with its parameters broken, so the bucket
+		// refused the logo.
+		$src = esc_url( $url, array( 'http', 'https' ), 'db' );
 		foreach ( $element->getElementsByTagName( 'img' ) as $logo_img ) {
-			$logo_img->setAttribute( 'src', esc_url( $url ) );
+			$logo_img->setAttribute( 'src', $src );
 			if ( '' !== $logo_alt ) {
 				$logo_img->setAttribute( 'alt', $logo_alt );
 			}
@@ -965,10 +1028,343 @@ class Template {
 	}
 
 	/**
+	 * Whether an image URL configured for the banner is served by this site.
+	 *
+	 * The banner template is printed on every page before the visitor has
+	 * chosen anything, so each image in it is a request the visitor did not
+	 * agree to. One to the site itself tells nobody anything new; one to
+	 * another host discloses the visit to it. A URL passes when it is a path on
+	 * this site or its host is the site's own: the home and site addresses, as
+	 * WordPress reports them for the request and as they are stored, and the
+	 * host of the uploads folder. `www.` is ignored on both sides.
+	 *
+	 * A URL on any other host passes only when it is a Media Library
+	 * attachment that WordPress itself serves from that very address (see
+	 * is_media_library_image()). An offload plugin (WP Offload Media and the
+	 * like) rewrites attachment URLs to its bucket or CDN host and leaves the
+	 * uploads folder alone, so the picker stores such a URL for an image that
+	 * is the site's own media; refusing it dropped the logo silently.
+	 *
+	 * The `faz_banner_image_hosts` filter adds hosts the site owner answers
+	 * for, such as a CDN domain of their own that WordPress does not know.
+	 *
+	 * @param string $url Image URL from the banner config.
+	 * @return bool
+	 */
+	public static function is_first_party_image_url( $url ) {
+		$url = trim( (string) $url );
+		// A backslash is a slash to a browser (`/\host` leaves the site) but
+		// not to the parser below, and a control character has no place here.
+		if ( '' === $url || '#' === $url || preg_match( '/[\\\\\x00-\x20\x7f]/', $url ) ) {
+			return false;
+		}
+		if ( '/' === $url[0] && ( ! isset( $url[1] ) || '/' !== $url[1] ) ) {
+			return true;
+		}
+		$host = self::image_host( $url );
+		if ( '' === $host ) {
+			return false;
+		}
+		$hosts = self::allowed_image_hosts( $url );
+		foreach ( is_array( $hosts ) ? $hosts : array() as $allowed ) {
+			if ( is_string( $allowed ) && '' !== $allowed && self::image_host( '//' . $allowed ) === $host ) {
+				return true;
+			}
+		}
+		// A filter that returns no list allows nothing, the lookup included.
+		return is_array( $hosts ) && self::is_media_library_image( $url );
+	}
+
+	/**
+	 * Hosts a banner image may be loaded from, as the filter leaves them.
+	 *
+	 * The site's own hosts (see is_first_party_image_url()) passed through
+	 * `faz_banner_image_hosts`. The cached template signs this list too
+	 * (get_layout_signature()): it is code, not a setting, so changing it
+	 * clears nothing, and without it in the signature a host taken off the
+	 * list kept its image in the stored template.
+	 *
+	 * @param string $url The image URL being checked.
+	 * @return mixed What the filter returned; anything but an array allows nothing.
+	 */
+	private static function allowed_image_hosts( $url ) {
+		$own = array();
+		foreach ( array( 'home_url', 'site_url' ) as $address ) {
+			if ( function_exists( $address ) ) {
+				$own[] = (string) $address();
+			}
+		}
+		$own[] = (string) get_option( 'home', '' );
+		$own[] = (string) get_option( 'siteurl', '' );
+		if ( function_exists( 'wp_get_upload_dir' ) ) {
+			$uploads = wp_get_upload_dir();
+			$own[]   = isset( $uploads['baseurl'] ) ? (string) $uploads['baseurl'] : '';
+		}
+		$hosts = array_filter( array_map( array( __CLASS__, 'image_host' ), $own ) );
+		/**
+		 * Hosts the banner may load its custom images (brand logo, revisit
+		 * widget image) from before consent, besides the site's own.
+		 *
+		 * @param string[] $hosts Host names, lower case, without `www.`.
+		 * @param string   $url   The image URL being checked.
+		 */
+		return apply_filters( 'faz_banner_image_hosts', array_values( array_unique( $hosts ) ), $url );
+	}
+
+	/**
+	 * Whether a URL is a Media Library attachment as WordPress serves it.
+	 *
+	 * The proof is not the file name or the path, which any host can copy,
+	 * but that wp_get_attachment_url() (or one of the attachment's generated
+	 * sizes) answers with this very host and path: WordPress, through the
+	 * offload plugin filtering it, is what sends visitors there for the
+	 * site's own media. The query string is ignored, a private bucket signs
+	 * its URLs.
+	 *
+	 * @param string $url Image URL from the banner config.
+	 * @return bool
+	 */
+	private static function is_media_library_image( $url ) {
+		$id = self::brand_logo_attachment_id( $url );
+		return $id > 0 && self::attachment_serves_url( $id, $url );
+	}
+
+	/**
+	 * Host and path of a URL, the part two addresses of one file share.
+	 *
+	 * @param string $url Absolute or protocol-relative URL.
+	 * @return string '' when the URL has no host or no path.
+	 */
+	private static function image_host_path( $url ) {
+		$url  = preg_replace( '/[?#].*$/', '', trim( (string) $url ) );
+		$host = self::image_host( $url );
+		$path = wp_parse_url( $url, PHP_URL_PATH );
+		return ( '' === $host || ! is_string( $path ) || '' === $path ) ? '' : $host . $path;
+	}
+
+	/**
+	 * Whether WordPress serves an attachment, or one of its sizes, from a URL.
+	 *
+	 * @param int    $id  Attachment id.
+	 * @param string $url URL to compare.
+	 * @return bool
+	 */
+	private static function attachment_serves_url( $id, $url ) {
+		$wanted = self::image_host_path( $url );
+		if ( '' === $wanted || ! function_exists( 'wp_get_attachment_url' ) ) {
+			return false;
+		}
+		if ( self::image_host_path( (string) wp_get_attachment_url( $id ) ) === $wanted ) {
+			return true;
+		}
+		$meta = function_exists( 'wp_get_attachment_metadata' ) ? wp_get_attachment_metadata( $id ) : false;
+		if ( ! is_array( $meta ) || empty( $meta['sizes'] ) || ! is_array( $meta['sizes'] ) || ! function_exists( 'wp_get_attachment_image_src' ) ) {
+			return false;
+		}
+		foreach ( array_keys( $meta['sizes'] ) as $size ) {
+			$src = wp_get_attachment_image_src( $id, $size );
+			if ( is_array( $src ) && isset( $src[0] ) && self::image_host_path( (string) $src[0] ) === $wanted ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Attachment WordPress serves from a URL outside the uploads folder.
+	 *
+	 * attachment_url_to_postid() only knows URLs under the uploads folder, so
+	 * an offloaded attachment is looked up by its file name and kept only
+	 * when WordPress serves it from this URL (attachment_serves_url()).
+	 *
+	 * @param string $url Image URL, without query string.
+	 * @return int Attachment id, 0 when there is none.
+	 */
+	private static function served_attachment_id( $url ) {
+		if ( ! function_exists( 'get_posts' ) || '' === self::image_host( $url ) ) {
+			return 0;
+		}
+		$path = wp_parse_url( (string) $url, PHP_URL_PATH );
+		$name = is_string( $path ) ? wp_basename( $path ) : '';
+		if ( '' === $name ) {
+			return 0;
+		}
+		// The file itself, then the original a generated size was cut from.
+		$names    = array( $name );
+		$original = preg_replace( '/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', $name );
+		if ( is_string( $original ) && '' !== $original && $original !== $name ) {
+			$names[] = $original;
+		}
+		// First the stored path itself. WordPress keeps file names unique within
+		// an uploads folder (wp_unique_filename()), so `_wp_attached_file`
+		// equal to `2026/11/logo.png` names one attachment however many
+		// `logo.png` the library holds. The path is not known from the URL
+		// alone: an offload host may add its own prefix, a folder plugin may
+		// store more than year and month (`clients/acme/2024/01/logo.png`), and
+		// WP Offload Media's object versioning puts a timestamp folder before
+		// the file name (`2026/11/26113405/logo.png` served for a stored
+		// `2026/11/logo.png`). So every trailing part of the URL's folders is
+		// tried, with and without the folder right before the file, in one
+		// exact IN query: at most twice the number of folders per name.
+		$segments = array_values( array_filter( explode( '/', (string) $path ), 'strlen' ) );
+		$variants = array( array( $names, $segments ) );
+		// An offload host may serve a name with non-ASCII letters
+		// percent-encoded (`2026/11/%E3%83%AD%E3%82%B4.png`) while
+		// `_wp_attached_file` keeps it as uploaded (`2026/11/ロゴ.png`), and
+		// wp_basename() leaves the escapes in. So both lookups also try the
+		// decoded path and name. Only the lookup: whether the attachment is
+		// the one this URL shows is still decided by attachment_serves_url(),
+		// against the URL as WordPress serves it. A part that decodes to a
+		// slash or a control character is no file name; those are not tried.
+		$plain = array_map( 'rawurldecode', $segments );
+		if ( $plain !== $segments && ! preg_grep( '/[\/\\\\\x00-\x1f\x7f]/', $plain ) ) {
+			$variants[] = array( array_map( 'rawurldecode', $names ), $plain );
+		}
+		$stored = array();
+		$names  = array();
+		foreach ( $variants as $variant ) {
+			$dir     = array_slice( array_slice( $variant[1], 0, -1 ), -8 );
+			$layouts = array( $dir );
+			if ( $dir ) {
+				$layouts[] = array_slice( $dir, 0, -1 );
+			}
+			foreach ( $variant[0] as $file ) {
+				$names[] = $file;
+				foreach ( $layouts as $folders ) {
+					for ( $depth = count( $folders ); $depth >= 0; $depth-- ) {
+						$stored[] = implode( '/', array_merge( array_slice( $folders, count( $folders ) - $depth ), array( $file ) ) );
+					}
+				}
+			}
+		}
+		$names = array_values( array_unique( $names ) );
+		$ids = get_posts(
+			array(
+				'post_type'      => 'attachment',
+				'post_status'    => 'any',
+				'fields'         => 'ids',
+				'posts_per_page' => 50,
+				'no_found_rows'  => true,
+				'orderby'        => 'ID',
+				'order'          => 'DESC',
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- same narrow trigger as the walk below; exact values, each candidate verified against wp_get_attachment_url().
+				'meta_query'     => array(
+					array(
+						'key'     => '_wp_attached_file',
+						'value'   => array_values( array_unique( $stored ) ),
+						'compare' => 'IN',
+					),
+				),
+			)
+		);
+		foreach ( is_array( $ids ) ? $ids : array() as $candidate ) {
+			$candidate = (int) $candidate;
+			if ( $candidate > 0 && self::attachment_serves_url( $candidate, $url ) ) {
+				return $candidate;
+			}
+		}
+		// Then the file name anywhere in the stored path, for a layout the
+		// segments above do not reproduce. The match is decided by
+		// attachment_serves_url(), not by the query, so
+		// the right attachment can sit behind any number of newer ones that
+		// share the file name (`logo.png` uploaded every year). Stopping at
+		// the first page dropped a valid logo on such a library. The walk is
+		// bounded: pages of 50, at most 10 pages (500 candidates) per name.
+		$per_page  = 50;
+		$max_pages = 10;
+		foreach ( $names as $file ) {
+			for ( $page = 1; $page <= $max_pages; $page++ ) {
+				$ids = get_posts(
+					array(
+						'post_type'      => 'attachment',
+						'post_status'    => 'any',
+						'fields'         => 'ids',
+						'posts_per_page' => $per_page,
+						'paged'          => $page,
+						'no_found_rows'  => true,
+						'orderby'        => 'ID',
+						'order'          => 'DESC',
+						// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- runs only for a banner image on a host that is not the site's, when the template is built or the banner is opened in the editor; the result is then verified against wp_get_attachment_url().
+						'meta_query'     => array(
+							array(
+								'key'     => '_wp_attached_file',
+								'value'   => $file,
+								'compare' => 'LIKE',
+							),
+						),
+					)
+				);
+				$ids = is_array( $ids ) ? $ids : array();
+				foreach ( $ids as $candidate ) {
+					$candidate = (int) $candidate;
+					if ( $candidate > 0 && self::attachment_serves_url( $candidate, $url ) ) {
+						return $candidate;
+					}
+				}
+				// A short page is the last one.
+				if ( count( $ids ) < $per_page ) {
+					break;
+				}
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * Which of a banner's custom images are stored but not shown to visitors.
+	 *
+	 * Mirrors prepare_html(): a brand logo or a revisit widget image whose
+	 * URL fails is_first_party_image_url() is left out of the template. The
+	 * banner editor shows a warning under each field named here, so an image
+	 * that stops being rendered (a URL saved before the check existed, or one
+	 * set through REST or an import) does not just vanish from the site.
+	 *
+	 * @param mixed $settings Banner settings (Banner::get_settings()).
+	 * @return string[] Any of 'brandLogo', 'revisitConsent'.
+	 */
+	public static function banner_image_warnings( $settings ) {
+		$warnings = array();
+		$config   = ( is_array( $settings ) && isset( $settings['config'] ) && is_array( $settings['config'] ) ) ? $settings['config'] : array();
+		$not_shown = function ( $url ) {
+			$url = is_string( $url ) ? trim( $url ) : '';
+			if ( '' === $url || '#' === $url ) {
+				return false;
+			}
+			return ! self::is_first_party_image_url( esc_url_raw( $url, array( 'http', 'https' ) ) );
+		};
+		$logo = isset( $config['notice']['elements']['brandLogo'] ) ? $config['notice']['elements']['brandLogo'] : null;
+		// A logo that is switched off is not rendered whatever its URL is.
+		if ( is_array( $logo ) && ! empty( $logo['status'] ) && isset( $logo['meta']['url'] ) && $not_shown( $logo['meta']['url'] ) ) {
+			$warnings[] = 'brandLogo';
+		}
+		if ( isset( $config['revisitConsent']['meta']['url'] ) && $not_shown( $config['revisitConsent']['meta']['url'] ) ) {
+			$warnings[] = 'revisitConsent';
+		}
+		return $warnings;
+	}
+
+	/**
+	 * Host of a URL, lower case and without a leading `www.`; '' when it has none.
+	 *
+	 * @param string $url Absolute or protocol-relative URL.
+	 * @return string
+	 */
+	private static function image_host( $url ) {
+		$host = wp_parse_url( (string) $url, PHP_URL_HOST );
+		if ( ! is_string( $host ) || '' === $host ) {
+			return '';
+		}
+		$host = strtolower( $host );
+		return 0 === strpos( $host, 'www.' ) ? substr( $host, 4 ) : $host;
+	}
+
+	/**
 	 * Media Library attachment a brand logo URL points to.
 	 *
 	 * A URL to one of the image's generated sizes (`logo-300x100.png`) is
 	 * retried as the original, which is what attachment_url_to_postid() knows.
+	 * A URL outside the uploads folder, where an offload plugin serves the
+	 * Media Library from, is looked up by served_attachment_id().
 	 *
 	 * @param string $url Logo URL from the banner config.
 	 * @return int Attachment id, 0 for an external URL or none.
@@ -984,6 +1380,9 @@ class Template {
 			if ( $original !== $url ) {
 				$id = (int) attachment_url_to_postid( $original );
 			}
+		}
+		if ( $id <= 0 ) {
+			$id = self::served_attachment_id( $url );
 		}
 		return max( 0, $id );
 	}
@@ -1111,42 +1510,67 @@ class Template {
 			? $faz_settings['banner_control']
 			: array();
 
-		return md5(
-			wp_json_encode(
-				array(
-					// Bump the cache whenever the plugin updates: the generated
-					// template HTML (ids, classes, accordion structure) can change
-					// between releases, and the stored template must never outlive
-					// the JS that hydrates it. Without this a post-update install
-					// keeps serving the previous version's markup to the new
-					// script.js, silently breaking features such as the per-service
-					// sub-toggles (issue #146).
-					'plugin_version' => defined( 'FAZ_VERSION' ) ? FAZ_VERSION : 'dev',
-					'version'        => isset( $settings['versionID'] ) ? $settings['versionID'] : 'default',
-					'type'           => isset( $settings['type'] ) ? $settings['type'] : 'box',
-					'ptype'          => isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup',
-					'theme'          => isset( $settings['theme'] ) ? $settings['theme'] : 'light',
-					'law'            => isset( $settings['applicableLaw'] ) ? $settings['applicableLaw'] : 'gdpr',
-					// The notice button order rewrites the markup (#367).
-					'button_order'   => Banner::sanitize_button_order( isset( $settings['buttonOrder'] ) ? $settings['buttonOrder'] : '' ),
-					'do_not_sell'    => $do_not_sell,
-					'optout_popup'   => ! empty( $config['optoutPopup']['status'] ),
-					'revisit_status' => isset( $config['revisitConsent']['status'] ) ? (bool) $config['revisitConsent']['status'] : true,
-					'revisit_alternative' => ! empty( $config['revisitConsent']['verifiedAlternative'] ),
-					// Toggling per-service / per-cookie consent changes the
-					// preference-center structure, so it must invalidate the cache.
-					'per_service'    => ! empty( $banner_control['per_service_consent'] ),
-					'per_cookie'     => ! empty( $banner_control['per_cookie_consent'] ),
-					'description'    => md5( $notice_description ),
-					// The locale resolve_build_locale() picks drives the translated
-					// chrome (Always Active / audit-table headers). It can differ
-					// from $this->language (e.g. de_DE when the key is 'en'), so it
-					// must be in the signature or a WP locale switch would keep
-					// serving stale-language labels from cache. (CodeRabbit PR #164)
-					'build_locale'   => $this->resolve_build_locale(),
-				)
-			)
+		$signature = array(
+			// Bump the cache whenever the plugin updates: the generated
+			// template HTML (ids, classes, accordion structure) can change
+			// between releases, and the stored template must never outlive
+			// the JS that hydrates it. Without this a post-update install
+			// keeps serving the previous version's markup to the new
+			// script.js, silently breaking features such as the per-service
+			// sub-toggles (issue #146).
+			'plugin_version' => defined( 'FAZ_VERSION' ) ? FAZ_VERSION : 'dev',
+			'version'        => isset( $settings['versionID'] ) ? $settings['versionID'] : 'default',
+			'type'           => isset( $settings['type'] ) ? $settings['type'] : 'box',
+			'ptype'          => isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup',
+			'theme'          => isset( $settings['theme'] ) ? $settings['theme'] : 'light',
+			'law'            => isset( $settings['applicableLaw'] ) ? $settings['applicableLaw'] : 'gdpr',
+			// The notice button order rewrites the markup (#367).
+			'button_order'   => Banner::sanitize_button_order( isset( $settings['buttonOrder'] ) ? $settings['buttonOrder'] : '' ),
+			'do_not_sell'    => $do_not_sell,
+			'optout_popup'   => ! empty( $config['optoutPopup']['status'] ),
+			'revisit_status' => isset( $config['revisitConsent']['status'] ) ? (bool) $config['revisitConsent']['status'] : true,
+			'revisit_alternative' => ! empty( $config['revisitConsent']['verifiedAlternative'] ),
+			// Toggling per-service / per-cookie consent changes the
+			// preference-center structure, so it must invalidate the cache.
+			'per_service'    => ! empty( $banner_control['per_service_consent'] ),
+			'per_cookie'     => ! empty( $banner_control['per_cookie_consent'] ),
+			'description'    => md5( $notice_description ),
+			// The locale resolve_build_locale() picks drives the translated
+			// chrome (Always Active / audit-table headers). It can differ
+			// from $this->language (e.g. de_DE when the key is 'en'), so it
+			// must be in the signature or a WP locale switch would keep
+			// serving stale-language labels from cache. (CodeRabbit PR #164)
+			'build_locale'   => $this->resolve_build_locale(),
 		);
+		// Which custom images prepare_html() keeps depends on the host list
+		// of the `faz_banner_image_hosts` filter, which is code: editing it
+		// saves nothing and clears no cache. Signing the list each image is
+		// checked against makes the stored template follow it, so a host
+		// taken off the list stops being requested before consent at the
+		// next render, as the editor's warning (banner_image_warnings())
+		// already says. Only the filter is signed, not the Media Library
+		// lookup behind it: that one queries the database, and this runs on
+		// every page. A banner without a custom image keeps its signature.
+		$image_hosts = array();
+		$images      = array(
+			'brandLogo'      => isset( $config['notice']['elements']['brandLogo']['meta']['url'] ) ? $config['notice']['elements']['brandLogo']['meta']['url'] : '',
+			'revisitConsent' => isset( $config['revisitConsent']['meta']['url'] ) ? $config['revisitConsent']['meta']['url'] : '',
+		);
+		foreach ( $images as $image => $url ) {
+			$url = is_string( $url ) ? trim( $url ) : '';
+			if ( '' === $url || '#' === $url ) {
+				continue;
+			}
+			// Checked as prepare_html() checks it.
+			$url = esc_url_raw( $url, array( 'http', 'https' ) );
+			if ( '' !== self::image_host( $url ) ) {
+				$image_hosts[ $image ] = self::allowed_image_hosts( $url );
+			}
+		}
+		if ( $image_hosts ) {
+			$signature['image_hosts'] = md5( (string) wp_json_encode( $image_hosts ) );
+		}
+		return md5( wp_json_encode( $signature ) );
 	}
 
 	/**

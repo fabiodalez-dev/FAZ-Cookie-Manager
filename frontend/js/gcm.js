@@ -460,6 +460,8 @@ function updateConsentState(consentState) {
 // bundle had already restored (see the listeners below).
 function restoreBaseline() {
     restoredFromCookie = false;
+    // The baseline is now the state in force, not the banner's 'init' state.
+    endPreConsentState(null);
     // The region defaults, not a global denial (see baselineConsentState).
     var baseline = baselineConsentState();
     setNpaIfDenied(baseline.ad_storage);
@@ -503,15 +505,132 @@ document.addEventListener("fazcookie_consent_ready", function (event) {
     if (!current || !config._geoBootstrap) return;
     updateConsentState(buildConsentState(current));
     restoredFromCookie = true;
+    endPreConsentState(current);
     if (data.gacm_enabled && data.gacm_provider_ids) {
         setAdditionalConsent(current);
     }
 });
 
+// Signals-only mode: Google Consent Mode is switched OFF and this bundle is
+// loaded only because the plugin prints a Google tag of its own, which must
+// never run without consent signals (Gcm_Settings::sends_consent_signals()).
+// There is no admin-configured Consent Mode behaviour to honour in that mode,
+// so the state has to say what the banner itself decided for this visitor.
+//
+// The cookie cannot tell: before the visitor acts the runtime keeps the state
+// in memory only (no identifier before an action, ePrivacy Art. 5(3)). Under
+// an opt-out banner (CCPA) that in-memory state is "yes" for every category
+// not opted out of, and the runtime releases the parked tag on it — while the
+// denied default above stayed in force, so a visitor who never touched the
+// notice had GA4/Ads denied for the whole visit. The runtime announces that
+// state with action 'init' (accepted/rejected slugs); it is mapped through
+// buildConsentState() exactly like a stored record, so a category opted out
+// of (pre-ticked box, runtime geo ruleset) keeps ad_storage, ad_user_data and
+// ad_personalization denied. Under an opt-in banner everything non-necessary
+// is in `rejected` and the update repeats the denial.
+//
+// A readable cookie always wins and is handled by the callers: GPC, a Do Not
+// Sell request and every banner action write one before they fire the event.
+// With GCM switched on this never runs — the region defaults are the admin's
+// decision and a first visit must not overwrite them.
+//
+// A live change that leaves no readable cookie (the browser refused the write,
+// or dropped it for its size) is followed too, but only downwards. The state
+// pushed from 'init' is a grant under an opt-out banner, and such an event
+// used to be ignored here: the visitor opted out, the runtime blocked the
+// tags from its in-memory store, and ad_storage, ad_user_data and
+// ad_personalization stayed "granted" until the next page load. A category
+// the event does not list as accepted is now denied, and stays denied for the
+// rest of the page view — a later 'init' (the runtime announces it again when
+// it rebuilds the banner) or a later event does not grant it back. Nothing is
+// ever granted from such an event: a grant comes from the banner's own
+// pre-consent state or from a stored record, never from an event alone.
+var lastPreConsentJson = "";
+var lastPreConsentState = null;
+var liveDenied = {};
+// The state pushed from 'init' stops being the one in force as soon as a
+// stored record is restored or the baseline is put back. Forget it then: a
+// later event without a cookie used to rebuild the state from that old
+// snapshot once restoreBaseline() had cleared restoredFromCookie, and so
+// granted again a category the stored record had denied. The JSON is cleared
+// with it, so a new 'init' is compared with nothing stale. What a restored
+// record denied joins liveDenied, so neither that new 'init' nor a later
+// event grants back, on this page view, a refusal the visitor recorded; a
+// stored record still decides on its own (it never goes through here).
+function endPreConsentState(record) {
+    lastPreConsentState = null;
+    lastPreConsentJson = "";
+    if (!record) return;
+    for (var slug in record) {
+        if (!Object.prototype.hasOwnProperty.call(record, slug) || FAZ_META_KEYS[slug]) continue;
+        if (slug !== "necessary" && record[slug] === "denied") liveDenied[slug] = true;
+    }
+}
+// A record restored in <head> (above) is a refusal of this page view too.
+if (restoredFromCookie) endPreConsentState(initialCookieObj);
+function preConsentStateFrom(detail) {
+    var accepted = Array.isArray(detail.accepted) ? detail.accepted : [];
+    var rejected = Array.isArray(detail.rejected) ? detail.rejected : [];
+    var state = {};
+    var i;
+    for (i = 0; i < accepted.length; i++) {
+        if (typeof accepted[i] === "string") state[accepted[i]] = "granted";
+    }
+    // Rejected last: a slug listed in both is denied.
+    for (i = 0; i < rejected.length; i++) {
+        if (typeof rejected[i] === "string") state[rejected[i]] = "denied";
+    }
+    // Same alias parseConsentCookie() applies to a stored record.
+    if (!state.marketing && state.advertisement) state.marketing = state.advertisement;
+    return state;
+}
+function applyPreConsentState(detail) {
+    if (!data.signals_only) return false;
+    detail = plain(detail);
+    if (!detail) return false;
+    var state;
+    var slug;
+    if (detail.action === "init") {
+        state = preConsentStateFrom(detail);
+    } else {
+        // Not a pre-consent state. It matters only while the state pushed
+        // from 'init' is the one in force; after a stored record was
+        // restored the caller goes back to the baseline instead.
+        if (!lastPreConsentState || restoredFromCookie) return false;
+        var live = preConsentStateFrom(detail);
+        state = {};
+        for (slug in lastPreConsentState) {
+            if (!Object.prototype.hasOwnProperty.call(lastPreConsentState, slug)) continue;
+            state[slug] = lastPreConsentState[slug];
+            // "necessary" is not a choice the visitor can withdraw.
+            if (slug !== "necessary" && live[slug] !== "granted") liveDenied[slug] = true;
+        }
+    }
+    for (slug in liveDenied) {
+        if (Object.prototype.hasOwnProperty.call(liveDenied, slug) && state[slug] === "granted") state[slug] = "denied";
+    }
+    // The runtime announces 'init' again when it rebuilds the banner; the same
+    // state is not pushed twice.
+    var json = JSON.stringify(state);
+    if (json === lastPreConsentJson && !restoredFromCookie) return true;
+    lastPreConsentJson = json;
+    lastPreConsentState = state;
+    restoredFromCookie = false;
+    updateConsentState(buildConsentState(state));
+    if (data.gacm_enabled && data.gacm_provider_ids) {
+        setAdditionalConsent(state);
+    }
+    return true;
+}
+
 // Re-apply on consent changes (banner interaction).
-document.addEventListener("fazcookie_consent_update", function () {
+document.addEventListener("fazcookie_consent_update", function (event) {
     var updated = parseConsentCookie();
     if (!updated) {
+        // Signals-only mode: follow the banner's pre-consent state on a first
+        // visit, and a withdrawal from it that left no cookie behind (see
+        // applyPreConsentState()).
+        if (applyPreConsentState(event && event.detail)) return;
         // parseConsentCookie() returns null when there is no cookie, or when it
         // is stale (revision bump), out of scope or malformed.
         //
@@ -534,6 +653,7 @@ document.addEventListener("fazcookie_consent_update", function () {
     }
     updateConsentState(buildConsentState(updated));
     restoredFromCookie = true;
+    endPreConsentState(updated);
     // Also update GACM additional consent string if enabled.
     if (data.gacm_enabled && data.gacm_provider_ids) {
         setAdditionalConsent(updated);
@@ -566,6 +686,13 @@ function setAdditionalConsent(consentObj) {
 // Apply GACM on page load if enabled.
 if (data.gacm_enabled && data.gacm_provider_ids) {
     setAdditionalConsent(initialCookieObj);
+}
+
+// Signals-only mode, loaded AFTER the runtime started (a page optimiser moved
+// or delayed this bundle): the 'init' event is gone, but the runtime records
+// the state it announced in window._fazConsentReady for exactly this case.
+if (!initialCookieObj) {
+    applyPreConsentState(window._fazConsentReady);
 }
 
 })();

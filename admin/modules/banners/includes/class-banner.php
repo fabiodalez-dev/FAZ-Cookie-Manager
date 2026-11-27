@@ -434,7 +434,8 @@ class Banner extends Store {
 	 * style. What depends on the law takes the GDPR defaults: the buttons and
 	 * panels the two default configurations switch differently (accept,
 	 * reject, settings, preference centre, Do Not Sell, the opt-out popup...),
-	 * a consent lifetime no longer than the GDPR default, and the default GDPR
+	 * no close button (X) next to Reject, whatever the banner allows its own
+	 * visitors, a consent lifetime no longer than the GDPR default, and the default GDPR
 	 * text of each language, since the banner's own text was written for an
 	 * opt-out notice. Nothing is saved.
 	 *
@@ -462,6 +463,12 @@ class Banner extends Store {
 			isset( $ccpa['config'] ) && is_array( $ccpa['config'] ) ? $ccpa['config'] : array()
 		);
 		$properties['settings']['applicableLaw'] = 'gdpr';
+		// "Allow Close (X) alongside Reject" is a non-EU option: the X beside a
+		// labelled Reject is the double dismissal EDPB Guidelines 03/2022 and
+		// the Garante count as a dark pattern, and Template::prepare_html()
+		// keeps the X whenever this is on. It is a setting, not one of the
+		// config switches apply_law_switches() carries, so it is reset here.
+		$properties['settings']['allowCloseButtonWithReject'] = false;
 		$gdpr_expiry = isset( $gdpr['settings']['consentExpiry']['value'] ) ? (int) $gdpr['settings']['consentExpiry']['value'] : 0;
 		$expiry      = isset( $properties['settings']['consentExpiry']['value'] ) ? (int) $properties['settings']['consentExpiry']['value'] : 0;
 		if ( $gdpr_expiry > 0 && ( $expiry <= 0 || $expiry > $gdpr_expiry ) ) {

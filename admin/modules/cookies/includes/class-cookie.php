@@ -315,6 +315,46 @@ class Cookie extends Store {
 	}
 
 	/**
+	 * Whether a script URL pattern is too broad to act on.
+	 *
+	 * The pattern is matched as a substring of every script and iframe URL on
+	 * the page, and it also feeds the category map: a row whose pattern is
+	 * "/" or "js" in a non-necessary category would hold back nearly every
+	 * script on the site until that category is accepted. A pattern needs at
+	 * least four letters or digits to name something specific; an empty one
+	 * means "no pattern" and is not too broad.
+	 *
+	 * A named call such as `fbq(`, `ga(` or Adobe's `s.t(` is the exception.
+	 * The same map judges inline scripts, where a pattern without a URL shape
+	 * is a code signature (Frontend::code_signature_in()), and a call names
+	 * the tracker's own entry point however short its name is. Treating such
+	 * a row as patternless would let the inline snippet it held back on 1.40.0
+	 * run before consent. A global whose name starts with `_` or `$`, the
+	 * command-queue convention of `_paq`, `_gaq`, `_kmq` or `_cio` (shipped
+	 * blocker templates use some of these), is code for the same reason: no
+	 * host or file name looks like it. Both still need two letters or digits,
+	 * so `a(`, `$(` or `_a` is refused. A bare three-letter name such as
+	 * `ttq` or `www` cannot be told from a word of a URL by its shape, so it
+	 * stays refused: write it as the call, `ttq(`.
+	 *
+	 * @param string $pattern Pattern as stored.
+	 * @return boolean
+	 */
+	public static function is_too_broad_url_pattern( $pattern ) {
+		$pattern = trim( (string) $pattern );
+		if ( '' === $pattern ) {
+			return false;
+		}
+		$alnum = preg_match_all( '/[a-z0-9]/i', $pattern );
+		if ( $alnum >= 4 ) {
+			return false;
+		}
+		$is_named_call    = 1 === preg_match( '/^[A-Za-z_$][A-Za-z0-9_$]*(?:\s*\.\s*[A-Za-z_$][A-Za-z0-9_$]*)*\s*\(/', $pattern );
+		$is_queue_global  = 1 === preg_match( '/^[_$][A-Za-z0-9_$]*$/', $pattern );
+		return ! ( ( $is_named_call || $is_queue_global ) && $alnum >= 2 );
+	}
+
+	/**
 	 * Return cookie meta data.
 	 *
 	 * Three key classes are handled distinctly on read:

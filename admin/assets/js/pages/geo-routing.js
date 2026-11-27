@@ -199,6 +199,35 @@
 				el('td', null, el('strong', { text: t('ipinfoApiKey', 'ipinfo API key') })),
 				el('td', { text: data.ipinfo.key_present ? t('statusConfigured', '✅ configured') : t('statusNotSet', '⚪ not set') })
 			]));
+			// The hourly lookup budget. Past it (and while ipinfo refuses the
+			// account) the VPN state of new visitors is unknown and the runtime
+			// serves them the most-protective fallback instead of an opt-out
+			// rule set: say so here, where the rest of the pipeline is reported.
+			var budget = data.ipinfo.budget;
+			if (budget) {
+				var used = budget.limit > 0
+					? t('ipinfoBudgetUsed', '%1$s of %2$s').replace('%1$s', String(budget.used)).replace('%2$s', String(budget.limit))
+					: t('ipinfoBudgetNoCeiling', 'no ceiling (faz_ipinfo_lookups_per_hour filter)');
+				if (budget.spent) {
+					used += ' — ' + t('ipinfoBudgetSpent', '⚠️ spent. Until it reopens in about %d min, new visitors get no VPN check and those who would receive an opt-out rule set are served the most-protective fallback. Raise the ceiling with the faz_ipinfo_lookups_per_hour filter if your ipinfo plan allows it.').replace('%d', String(Math.max(1, Math.ceil(budget.retry_after / 60))));
+				}
+				tbody.appendChild(el('tr', null, [
+					el('td', null, el('strong', { text: t('ipinfoBudget', 'ipinfo lookups this hour') })),
+					el('td', { text: used })
+				]));
+				if (budget.last_spent_at > 0) {
+					tbody.appendChild(el('tr', null, [
+						el('td', null, el('strong', { text: t('ipinfoBudgetLastSpent', 'ipinfo hourly budget last ran out') })),
+						el('td', { text: new Date(budget.last_spent_at * 1000).toLocaleString(getLocale()) })
+					]));
+				}
+				if (budget.account_refused) {
+					tbody.appendChild(el('tr', null, [
+						el('td', null, el('strong', { text: t('ipinfoAccount', 'ipinfo account') })),
+						el('td', { text: t('ipinfoAccountRefused', '⚠️ ipinfo.io refused the last lookup (invalid key, exhausted quota or rate limit). No VPN check is made until it accepts again, and visitors who would receive an opt-out rule set are served the most-protective fallback.') })
+					]));
+				}
+			}
 			tbody.appendChild(el('tr', null, [
 				el('td', null, el('strong', { text: t('schemaMigration', 'Schema migration v2') })),
 				el('td', { text: data.migration.complete ? t('statusComplete', '✅ complete') : t('statusIncomplete', '⚠️ incomplete') })

@@ -14,6 +14,7 @@ use WP_Error;
 use FazCookie\Includes\Rest_Controller;
 use FazCookie\Admin\Modules\Banners\Includes\Controller;
 use FazCookie\Admin\Modules\Banners\Includes\Banner;
+use FazCookie\Admin\Modules\Banners\Includes\Template;
 use Exception;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -727,6 +728,11 @@ class Api extends Rest_Controller {
 			// Multi-banner geo-routing (1.13.18+).
 			'target_countries' => $object->get_target_countries(),
 			'priority'         => $object->get_priority(),
+			// Read-only: the custom images stored for this banner that the
+			// template leaves out because they are not served by this site
+			// (Template::is_first_party_image_url()). The editor warns under
+			// each field instead of letting the image vanish unexplained.
+			'image_warnings'   => Template::banner_image_warnings( $object->get_settings() ),
 		);
 	}
 

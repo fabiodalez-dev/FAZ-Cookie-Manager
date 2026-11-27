@@ -573,6 +573,26 @@ $wpdb->detected_col = null;
 $malformed          = $method->invoke( $instance );
 assert_eq( $malformed, array(), 'get_detected_cookie_names: non-array get_col result → empty list (defensive cast)' );
 
+// 9b. prepare_frontend_cookies(): a too-broad url_pattern is neither handed to
+//     the client as the cookie's provider nor put in the category map that
+//     blocks scripts until the category is accepted.
+$prep = $ref->getMethod( 'prepare_frontend_cookies' );
+$prep->setAccessible( true );
+$prov = $ref->getProperty( 'providers' );
+$prov->setAccessible( true );
+$prov->setValue( $instance, array() );
+$rows = $prep->invoke(
+	$instance,
+	array(
+		array( 'name' => 'wide_one', 'url_pattern' => '/', 'domain' => '' ),
+		array( 'name' => 'js_one', 'url_pattern' => 'js', 'domain' => '' ),
+		array( 'name' => 'widget_one', 'url_pattern' => 'widget.booking.example', 'domain' => '' ),
+	),
+	'functional'
+);
+assert_eq( array_column( $rows, 'provider', 'cookieID' ), array( 'wide_one' => '', 'js_one' => '', 'widget_one' => 'widget.booking.example' ), 'prepare_frontend_cookies: too-broad patterns reach the client as no provider' );
+assert_eq( $prov->getValue( $instance ), array( 'widget.booking.example' => array( 'functional' ) ), 'prepare_frontend_cookies: only the distinctive pattern enters the category map' );
+
 // =========================================================================
 // 10. #365 review: get_declared_service_map() — the ONE answer to "which
 //     declared row is which service", read by the frontend, the scripts map
@@ -629,11 +649,71 @@ assert_eq( $map['by_cookie'], array( 200 => 'booking-widget', 201 => 'booking-wi
 assert_false( isset( $map['by_cookie'][203] ), 'declared map: a hand-declared _ga is NOT a second service next to Google Analytics' );
 assert_false( isset( $map['by_cookie'][202] ), 'declared map: the cross-category clash is not exposed (no script gated on a toggle it does not own)' );
 assert_eq( $map['services']['chat-v1']['label'], 'Chat Loader', 'declared map: a frozen id keys the service, the name stays its label' );
-assert_true( isset( $GLOBALS['_transient_sets']['faz_declared_services_v2'] ), 'declared map: cached in the v2 transient' );
+assert_true( isset( $GLOBALS['_transient_sets']['faz_declared_services_v3'] ), 'declared map: cached in the v3 transient' );
+assert_eq( $map['services']['booking-widget']['patterns'], array(), 'declared map: rows without a url_pattern give the service no script pattern' );
 assert_eq( $ctrl->unique_declared_service_id( 'booking-widget', 4, 0 ), 'booking-widget', 'unique id: a key held in the SAME category is kept (the rows fold)' );
 assert_eq( $ctrl->unique_declared_service_id( 'chat-v1', 3, 0 ), 'chat-v1-2', 'unique id: a key held only by another category gets the first free suffix' );
 assert_eq( $ctrl->unique_declared_service_id( 'brand-new', 3, 0 ), 'brand-new', 'unique id: a free key is returned unchanged' );
 assert_eq( $ctrl->unique_declared_service_id( 'chat-v1', 3, 206 ), 'chat-v1', 'unique id: the row being saved does not collide with itself' );
+
+// Compliance review M3: the service carries the script its rows name
+// (url_pattern), so a per-service "no" can block that script and not only
+// delete the cookie. Rows folding into one service pool their patterns; a
+// scanner-discovered row's pattern stays a category rule and joins no service.
+$with_pattern               = declared_row( 210, 'booking_sess', 4 );
+$with_pattern->url_pattern  = ' widget.booking.example ';
+$same_service               = declared_row( 211, 'Booking Sess', 4, false, array( 'service_id' => 'booking_sess' ) );
+$same_service->url_pattern  = 'cdn.booking.example/app.js';
+$repeat                     = declared_row( 212, 'booking sess', 4, false, array( 'service_id' => 'booking_sess' ) );
+$repeat->url_pattern        = 'widget.booking.example';
+$discovered                 = declared_row( 213, '_hjSession_2', 3, true );
+$discovered->url_pattern    = 'static.hotjar.com';
+reset_inventory( $wpdb, array( $with_pattern, $same_service, $repeat, $discovered, declared_row( 214, 'no_script_cookie', 4 ) ) );
+$map = $ctrl->get_declared_service_map();
+assert_eq( $map['services']['booking_sess']['patterns'], array( 'widget.booking.example', 'cdn.booking.example/app.js' ), 'declared map: the service carries its rows\' url_pattern, trimmed and without repeats' );
+assert_eq( $map['services']['no_script_cookie']['patterns'], array(), 'declared map: a row that names no script has no pattern' );
+assert_false( in_array( 'static.hotjar.com', array_merge( ...array_values( array_column( $map['services'], 'patterns' ) ) ), true ), 'declared map: a scanner-discovered row\'s pattern joins no declared service' );
+// A map cached in the v2 shape (no patterns) is not read back after the upgrade.
+reset_inventory( $wpdb, array( $with_pattern ) );
+$GLOBALS['_transients']['faz_declared_services_v2'] = array( 'services' => array( 'stale' => array( 'id' => 'stale', 'label' => 'stale', 'category' => 'functional', 'cookies' => array( 'stale' ) ) ), 'by_cookie' => array() );
+$map = $ctrl->get_declared_service_map();
+assert_eq( array_keys( $map['services'] ), array( 'booking_sess' ), 'declared map: a v2 transient left by the previous version is ignored' );
+
+// 1.40 review follow-up: a pattern too broad to name one script ("/", "js")
+// would block almost every script on the site under the row's category, and
+// under per-service consent behind its toggle. Such a row works by name only.
+use FazCookie\Admin\Modules\Cookies\Includes\Cookie as Edge_Cookie;
+foreach ( array( '/', 'js', ' .js ', 'a.b', '*/*', 'www', 'a(', '$(', '(', '.t(', '_a', '$', '__', 'ttq' ) as $wide ) {
+	assert_true( Edge_Cookie::is_too_broad_url_pattern( $wide ), 'too broad: "' . $wide . '" names no script' );
+}
+// A named call is a code signature for inline scripts: `fbq(` or Adobe's
+// `s.t(` held the snippet back on 1.40.0 and must keep doing so.
+foreach ( array( '', 'gtag', 'widget.booking.example', 'cdn.example/app.js', 'hotjar', 'fbq(', 'ga(', 's.t(', 'ttq (', '_paq', '_gaq', '_kmq', '_cio', '$fb' ) as $fine ) {
+	assert_false( Edge_Cookie::is_too_broad_url_pattern( $fine ), 'not too broad: "' . $fine . '"' );
+}
+$wide_row              = declared_row( 215, 'wide_sess', 4 );
+$wide_row->url_pattern = '/';
+$js_row                = declared_row( 216, 'js_sess', 4 );
+$js_row->url_pattern   = 'js';
+$call_row              = declared_row( 217, 'fbq_sess', 4 );
+$call_row->url_pattern = 'fbq(';
+reset_inventory( $wpdb, array( $wide_row, $js_row, $call_row, $with_pattern ) );
+$map = $ctrl->get_declared_service_map();
+assert_eq( $map['services']['fbq_sess']['patterns'], array( 'fbq(' ), 'declared map: a short named call such as "fbq(" keeps holding its inline snippet' );
+assert_eq( $map['services']['wide_sess']['patterns'], array(), 'declared map: a "/" pattern gives the service no script pattern' );
+assert_eq( $map['services']['js_sess']['patterns'], array(), 'declared map: a "js" pattern gives the service no script pattern' );
+assert_eq( $map['services']['booking_sess']['patterns'], array( 'widget.booking.example' ), 'declared map: a distinctive pattern still comes through' );
+
+// Back to the inventory the checks below read.
+reset_inventory( $wpdb, array(
+	declared_row( 200, 'Booking Widget', 4 ),
+	declared_row( 201, 'booking-widget', 4 ),
+	declared_row( 202, 'booking widget', 5 ),
+	declared_row( 203, '_ga', 3 ),
+	declared_row( 204, 'nec_cookie', 1 ),
+	declared_row( 205, '_hjSession_1', 3, true ),
+	declared_row( 206, 'Chat Loader', 5, false, array( 'service_id' => 'chat-v1' ) ),
+) );
 
 // The REST/admin view reads the same map.
 $exposed = new Cookie( declared_row( 200, 'Booking Widget', 4 ) );
@@ -649,7 +729,8 @@ $fresh->save();
 $saved_meta = json_decode( $wpdb->last_update[1]['meta'], true );
 assert_eq( $saved_meta['service_id'] ?? null, 'chat-v1-2', 'save(): a declared row gets its id frozen, made unique across categories' );
 assert_eq( $saved_meta['opt_in_script'] ?? null, 'window.x=1', 'save(): freezing the id never drops the row\'s scripts' );
-assert_true( transient_purged( 'faz_declared_services_v2' ), 'save(): the map is dropped so the REST response carries the new key' );
+assert_true( transient_purged( 'faz_declared_services_v3' ), 'save(): the map is dropped so the REST response carries the new key' );
+assert_true( transient_purged( 'faz_declared_services_v2' ), 'save(): a map cached in the pre-pattern shape is dropped with it' );
 $wpdb->update_queue = array( 1 );
 $frozen = new Cookie( declared_row( 301, 'Renamed Widget', 3, false, array( 'service_id' => 'old-widget' ) ) );
 $frozen->save();
