@@ -683,12 +683,12 @@ assert_eq( array_keys( $map['services'] ), array( 'booking_sess' ), 'declared ma
 // would block almost every script on the site under the row's category, and
 // under per-service consent behind its toggle. Such a row works by name only.
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie as Edge_Cookie;
-foreach ( array( '/', 'js', ' .js ', 'a.b', '*/*', 'www', 'a(', '$(', '(', '.t(' ) as $wide ) {
+foreach ( array( '/', 'js', ' .js ', 'a.b', '*/*', 'www', 'a(', '$(', '(', '.t(', '_a', '$', '__', 'ttq' ) as $wide ) {
 	assert_true( Edge_Cookie::is_too_broad_url_pattern( $wide ), 'too broad: "' . $wide . '" names no script' );
 }
 // A named call is a code signature for inline scripts: `fbq(` or Adobe's
 // `s.t(` held the snippet back on 1.40.0 and must keep doing so.
-foreach ( array( '', 'gtag', 'widget.booking.example', 'cdn.example/app.js', 'hotjar', 'fbq(', 'ga(', 's.t(', 'ttq (' ) as $fine ) {
+foreach ( array( '', 'gtag', 'widget.booking.example', 'cdn.example/app.js', 'hotjar', 'fbq(', 'ga(', 's.t(', 'ttq (', '_paq', '_gaq', '_kmq', '_cio', '$fb' ) as $fine ) {
 	assert_false( Edge_Cookie::is_too_broad_url_pattern( $fine ), 'not too broad: "' . $fine . '"' );
 }
 $wide_row              = declared_row( 215, 'wide_sess', 4 );

@@ -329,8 +329,13 @@ class Cookie extends Store {
 	 * is a code signature (Frontend::code_signature_in()), and a call names
 	 * the tracker's own entry point however short its name is. Treating such
 	 * a row as patternless would let the inline snippet it held back on 1.40.0
-	 * run before consent. It still needs two letters or digits, so `a(` or
-	 * `$(` is refused.
+	 * run before consent. A global whose name starts with `_` or `$`, the
+	 * command-queue convention of `_paq`, `_gaq`, `_kmq` or `_cio` (shipped
+	 * blocker templates use some of these), is code for the same reason: no
+	 * host or file name looks like it. Both still need two letters or digits,
+	 * so `a(`, `$(` or `_a` is refused. A bare three-letter name such as
+	 * `ttq` or `www` cannot be told from a word of a URL by its shape, so it
+	 * stays refused: write it as the call, `ttq(`.
 	 *
 	 * @param string $pattern Pattern as stored.
 	 * @return boolean
@@ -344,8 +349,9 @@ class Cookie extends Store {
 		if ( $alnum >= 4 ) {
 			return false;
 		}
-		$is_named_call = 1 === preg_match( '/^[A-Za-z_$][A-Za-z0-9_$]*(?:\s*\.\s*[A-Za-z_$][A-Za-z0-9_$]*)*\s*\(/', $pattern );
-		return ! ( $is_named_call && $alnum >= 2 );
+		$is_named_call    = 1 === preg_match( '/^[A-Za-z_$][A-Za-z0-9_$]*(?:\s*\.\s*[A-Za-z_$][A-Za-z0-9_$]*)*\s*\(/', $pattern );
+		$is_queue_global  = 1 === preg_match( '/^[_$][A-Za-z0-9_$]*$/', $pattern );
+		return ! ( ( $is_named_call || $is_queue_global ) && $alnum >= 2 );
 	}
 
 	/**
