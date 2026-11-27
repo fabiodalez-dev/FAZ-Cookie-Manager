@@ -105,7 +105,12 @@ namespace {
 	}
 	function get_post_meta( $id, $key = '', $single = false ) { return ''; }
 	function do_shortcode( $html ) { return $html; }
-	function esc_url( $url ) { return (string) $url; }
+	// Like WordPress: for display each `&` becomes `&#038;`; the 'db'
+	// context (what esc_url_raw() is) leaves the URL as it is.
+	function esc_url( $url, $protocols = null, $_context = 'display' ) {
+		$url = esc_url_raw( $url, $protocols );
+		return 'display' === $_context ? preg_replace( '/&(?!#(?:\d+|x[a-f0-9]+);|[a-z1-4]{1,8};)/i', '&#038;', str_replace( '&amp;', '&#038;', $url ) ) : $url;
+	}
 	function esc_attr( $text ) { return htmlspecialchars( (string) $text, ENT_QUOTES ); }
 	// Like WordPress: a protocol outside the list empties the URL.
 	function esc_url_raw( $url, $protocols = null ) {
@@ -152,6 +157,21 @@ namespace {
 		public function __construct() {}
 
 		public function render( $revisit_url, $logo_url = '#' ) {
+			$this->configure( $revisit_url, $logo_url );
+			$method = new \ReflectionMethod( Template::class, 'prepare_html' );
+			$method->setAccessible( true );
+			return (string) $method->invoke( $this );
+		}
+
+		/** The signature load() compares the stored template's with. */
+		public function signature( $revisit_url, $logo_url = '#' ) {
+			$this->configure( $revisit_url, $logo_url );
+			$method = new \ReflectionMethod( Template::class, 'get_layout_signature' );
+			$method->setAccessible( true );
+			return (string) $method->invoke( $this );
+		}
+
+		private function configure( $revisit_url, $logo_url ) {
 			$this->template   = array(
 				'html' => '<div class="faz-btn-revisit-wrapper" data-faz-tag="revisit-consent"><button class="faz-btn-revisit"><img src="/wp-content/plugins/faz-cookie-manager/frontend/images/revisit.svg" alt="Revisit consent button"/></button></div>'
 					. '<div class="faz-consent-container"><div class="faz-consent-bar" data-faz-tag="notice"><div class="faz-custom-brand-logo-wrapper" data-faz-tag="brand-logo"><img src="" alt="Brand logo" class="faz-custom-brand-logo"/></div><p data-faz-tag="title">Title</p></div></div>',
@@ -170,9 +190,6 @@ namespace {
 					),
 				),
 			);
-			$method           = new \ReflectionMethod( Template::class, 'prepare_html' );
-			$method->setAccessible( true );
-			return (string) $method->invoke( $this );
 		}
 	}
 
@@ -188,6 +205,19 @@ namespace {
 	function image_sources( $html ) {
 		preg_match_all( '/<img[^>]*\ssrc="([^"]*)"/', $html, $m );
 		return $m[1];
+	}
+	/** The brand logo's src as a browser reads it, entities decoded. */
+	function logo_src( $html ) {
+		$doc = new \DOMDocument();
+		libxml_use_internal_errors( true );
+		$doc->loadHTML( '<?xml encoding="utf-8"?><body>' . $html . '</body>' );
+		libxml_clear_errors();
+		foreach ( $doc->getElementsByTagName( 'img' ) as $img ) {
+			if ( false !== strpos( ' ' . $img->getAttribute( 'class' ) . ' ', ' faz-custom-brand-logo ' ) ) {
+				return $img->getAttribute( 'src' );
+			}
+		}
+		return null;
 	}
 	function revisit_image( $html ) {
 		return preg_match( '/<button class="faz-btn-revisit">\s*<img[^>]*>/', $html, $m ) ? $m[0] : '';
@@ -287,6 +317,12 @@ namespace {
 	t( false !== strpos( $html, 'data-faz-tag="brand-logo"' ) && in_array( $offloaded_logo, image_sources( $html ), true ), 'an offloaded Media Library logo is shown' );
 	t( in_array( $cdn . '/wp-content/uploads/2026/11/logo-300x100.png', image_sources( $template->render( '#', $cdn . '/wp-content/uploads/2026/11/logo-300x100.png' ) ), true ), 'one of its generated sizes too' );
 	t( in_array( $offloaded_logo . '?X-Amz-Signature=abc', image_sources( $template->render( '#', $offloaded_logo . '?X-Amz-Signature=abc' ) ), true ), 'and a signed URL of it' );
+	// A signed URL carries several parameters; the browser must get every
+	// `&` as it was signed, not `&#038;` (which a display escape before the
+	// DOM's own escaping left in the attribute).
+	$signed = $offloaded_logo . '?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=900&X-Amz-Signature=abc';
+	$src    = logo_src( $template->render( '#', $signed ) );
+	t( $signed === $src, "a signed URL with several parameters reaches the browser whole (got $src)" );
 	t( false !== strpos( revisit_image( $template->render( $cdn . '/wp-content/uploads/2026/11/widget.png' ) ), 'faz-revisit-custom-image' ), 'an offloaded revisit widget image is used' );
 	t( 41 === Template::brand_logo_attachment_id( $offloaded_logo ), 'and the attachment is found, so the logo keeps its alt text' );
 
@@ -303,6 +339,35 @@ namespace {
 		$html = $template->render( $url, $url );
 		t( false === strpos( $html, 'data-faz-tag="brand-logo"' ) && false === strpos( revisit_image( $html ), 'faz-revisit-custom-image' ), "$what: neither image is rendered" );
 	}
+	// An offload host that serves a non-ASCII file name percent-encoded,
+	// for a stored path kept as uploaded. Neither core nor the lookup by
+	// the encoded name finds it; the decoded path does.
+	$GLOBALS['faz_test_attachments'][46] = array( 'file' => '2026/11/ロゴ.png', 'base' => $cdn . '/wp-content/uploads', 'sizes' => array() );
+	$encoded = $cdn . '/wp-content/uploads/2026/11/' . rawurlencode( 'ロゴ' ) . '.png';
+	$GLOBALS['faz_test_url_for'][46] = $encoded;
+	t( 46 === Template::brand_logo_attachment_id( $encoded ), 'a percent-encoded offload URL of a non-ASCII file name finds its attachment' );
+	t( $encoded === logo_src( $template->render( '#', $encoded ) ), 'so that logo is shown' );
+	// Found by the decoded name, still refused where WordPress does not serve it.
+	t( false === Template::is_first_party_image_url( 'https://images.thirdparty.example/wp-content/uploads/2026/11/' . rawurlencode( 'ロゴ' ) . '.png' ), 'the same encoded path on another host is refused' );
+	unset( $GLOBALS['faz_test_url_for'][46], $GLOBALS['faz_test_attachments'][46] );
+	// The substring walk has to go past its first page. Sixty attachments
+	// share the file name; the one the CDN URL shows is the 51st newest, and
+	// its stored path is nothing the exact lookup can rebuild from that URL.
+	$kept = $GLOBALS['faz_test_attachments'];
+	$GLOBALS['faz_test_attachments'] = array();
+	for ( $i = 0; $i < 60; $i++ ) {
+		$GLOBALS['faz_test_attachments'][ 200 + $i ] = array( 'file' => '2030/' . sprintf( '%02d', $i ) . '/brand.png', 'base' => 'https://shop.example/wp-content/uploads', 'sizes' => array() );
+	}
+	$GLOBALS['faz_test_attachments'][209] = array( 'file' => 'media/2019/03/brand.png', 'base' => $cdn . '/wp-content/uploads', 'sizes' => array() );
+	$paged = $cdn . '/o/a1b2c3/brand.png';
+	$GLOBALS['faz_test_url_for'][209] = $paged;
+	$GLOBALS['faz_test_get_posts']    = array();
+	t( 209 === Template::brand_logo_attachment_id( $paged ), 'the walk reaches a match on its second page (the 51st of 60 attachments of that name)' );
+	$second = array_filter( $GLOBALS['faz_test_get_posts'], function ( $query ) { return isset( $query['paged'] ) && 2 === (int) $query['paged']; } );
+	t( 1 === count( $second ), 'and it got there by reading the second page' );
+	t( $paged === logo_src( $template->render( '#', $paged ) ), 'so that logo is shown' );
+	unset( $GLOBALS['faz_test_url_for'][209] );
+	$GLOBALS['faz_test_attachments'] = $kept;
 	// A library that reuses a file name: the offloaded logo is older than
 	// more attachments of that name than one page of the lookup holds.
 	$kept = $GLOBALS['faz_test_attachments'];
@@ -362,6 +427,38 @@ namespace {
 	Template::is_first_party_image_url( 'https://shop.example/wp-content/uploads/2026/11/logo.png' );
 	t( array() === $GLOBALS['faz_test_get_posts'], 'a URL on the site is accepted without a Media Library query' );
 	$GLOBALS['faz_test_attachments'] = array();
+
+	echo "== The stored template follows the host filter ==\n";
+
+	// The filter is code: changing it saves nothing and clears no cache, so
+	// the stored template has to tell by its signature that its images were
+	// checked against another list.
+	$third = 'https://images.thirdparty.example/logo.png';
+	$GLOBALS['faz_test_filters']['faz_banner_image_hosts'] = function ( $hosts ) {
+		$hosts[] = 'images.thirdparty.example';
+		return $hosts;
+	};
+	$allowed = $template->signature( '#', $third );
+	t( $allowed === $template->signature( '#', $third ), 'the same list signs the same' );
+	$GLOBALS['faz_test_filters'] = array();
+	t( $allowed !== $template->signature( '#', $third ), 'a host taken off the list changes the signature, so load() rebuilds without its logo' );
+	$GLOBALS['faz_test_filters']['faz_banner_image_hosts'] = function ( $hosts ) {
+		$hosts[] = 'images.thirdparty.example';
+		return $hosts;
+	};
+	$revisit_allowed = $template->signature( 'https://images.thirdparty.example/widget.png' );
+	$GLOBALS['faz_test_filters']['faz_banner_image_hosts'] = function () {
+		return 'not-an-array';
+	};
+	t( $revisit_allowed !== $template->signature( 'https://images.thirdparty.example/widget.png' ), 'so does a filter that stops returning a list, for the revisit widget image too' );
+	$GLOBALS['faz_test_filters'] = array();
+	$plain_sig = $template->signature( '#' );
+	$GLOBALS['faz_test_filters']['faz_banner_image_hosts'] = function ( $hosts ) {
+		$hosts[] = 'images.thirdparty.example';
+		return $hosts;
+	};
+	t( $plain_sig === $template->signature( '#' ) && $plain_sig === $template->signature( '#', '/wp-content/uploads/logo.png' ), 'a banner without an image on a host, or with a path on the site, is not affected' );
+	$GLOBALS['faz_test_filters'] = array();
 
 	echo "== The editor is told which stored image is not shown ==\n";
 
