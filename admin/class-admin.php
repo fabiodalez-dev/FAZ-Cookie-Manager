@@ -27,6 +27,16 @@ class Admin {
 	private const ADMIN_SLUG = 'faz-cookie-manager';
 
 	/**
+	 * Admin menu icon: a cookie with a bite, one flat shape with the chips cut out.
+	 *
+	 * A base64 SVG data URI, because WordPress's svg-painter only recolours that
+	 * form to follow the admin colour scheme and the hover/current states, and
+	 * only when the shape uses plain fills. Dashicons has no cookie glyph; the
+	 * previous dashicons-food showed a fork and knife.
+	 */
+	private const MENU_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMCAyMCI+PHBhdGggZmlsbD0iYmxhY2siIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTTEzLjE2IDEuNTdBOSA5IDAgMSAwIDE4LjQzIDYuODRBMy45IDMuOSAwIDAgMSAxMy4xNiAxLjU3Wk00LjcgNi42YTEuNSAxLjUgMCAxIDAgMyAwYTEuNSAxLjUgMCAxIDAgLTMgMFpNOS45IDkuNGExLjMgMS4zIDAgMSAwIDIuNiAwYTEuMyAxLjMgMCAxIDAgLTIuNiAwWk00LjYgMTIuNGExLjIgMS4yIDAgMSAwIDIuNCAwYTEuMiAxLjIgMCAxIDAgLTIuNCAwWk04LjkgMTQuOGExLjUgMS41IDAgMSAwIDMgMGExLjUgMS41IDAgMSAwIC0zIDBaTTEzLjYgMTIuMmExLjIgMS4yIDAgMSAwIDIuNCAwYTEuMiAxLjIgMCAxIDAgLTIuNCAwWk04LjUgNC42YTAuOSAwLjkgMCAxIDAgMS44IDBhMC45IDAuOSAwIDEgMCAtMS44IDBaIi8+PC9zdmc+';
+
+	/**
 	 * The version of this plugin.
 	 *
 	 * @since    3.0.0
@@ -1680,7 +1690,7 @@ class Admin {
 			$capability,
 			$parent,
 			array( $this, 'render_page' ),
-			'dashicons-food',
+			self::MENU_ICON,
 			40
 		);
 
@@ -1710,7 +1720,7 @@ class Admin {
 			'manage_network_options',
 			'faz-cookie-manager-network',
 			array( $this, 'render_network_page' ),
-			'dashicons-food',
+			self::MENU_ICON,
 			81
 		);
 	}
