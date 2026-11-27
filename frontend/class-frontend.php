@@ -5965,9 +5965,15 @@ class Frontend {
 				$content
 			)
 			: '';
+		// A cookie row the administrator declared for this loader's URL (#360)
+		// is a service of its own, and the visitor's "no" to it holds the tag
+		// too: this branch returns before check_per_service_blocking(), which
+		// is the only other place that refusal is read. Catalogue owners of the
+		// URL are still not consulted — that is the Ads/Analytics distinction
+		// this branch exists for.
 		if ( '' !== $own_google && $this->gcm_advanced_exemption_active() ) {
 			$own_consent = $this->get_service_consent();
-			if ( ! isset( $own_consent[ $own_google ] ) || 'no' !== $own_consent[ $own_google ] ) {
+			if ( ( ! isset( $own_consent[ $own_google ] ) || 'no' !== $own_consent[ $own_google ] ) && ! $this->declared_owner_refuses( $attrs, $content, false ) ) {
 				return $full;
 			}
 			$own_category = \FazCookie\Includes\Google_Tag::category_for( $own_google, 'google-ads' === $own_google ? 'marketing' : 'analytics' );
@@ -10655,11 +10661,99 @@ class Frontend {
 			$has_explicit_yes = true;
 		}
 
+		// The URL patterns above are read against the tag's URL only, so an
+		// inline loader that merely BUILDS a declared row's URL (the gtag.js or
+		// Tag Manager snippet, with a row whose script pattern is
+		// `googletagmanager.com`) matched nothing and its refusal was lost —
+		// with the row's category accepted, the callers returned on the
+		// allowed category and the loader ran. A refusal wins over any "yes",
+		// as above.
+		if ( $this->declared_owner_refuses( $attrs, $content ) ) {
+			return true;
+		}
+
 		if ( $has_explicit_yes ) {
 			return false;
 		}
 
 		return null;
+	}
+
+	/**
+	 * Whether an administrator-declared cookie service (#360) the visitor
+	 * switched off (`svc.<id>:no`) names this script.
+	 *
+	 * Each of the row's patterns is matched the way check_per_service_blocking()
+	 * matches it — URL fragments against the tag's URL with the boundary rule,
+	 * code fragments as signatures in the body — plus one rule only declared
+	 * rows get: a script with no URL has its body searched for the row's URL
+	 * fragments too, so an inline loader is held by the row that names the
+	 * URL it builds. Catalogue patterns never get that rule: an inline config
+	 * object listing youtu.be or facebook.com links is not those trackers (see
+	 * inline_script_block_category()), while a declared row's pattern is one
+	 * the site owner wrote for that script. A script with a src runs the src,
+	 * not its body, so its body is not searched for URLs.
+	 *
+	 * Only declared rows are consulted, never a catalogue owner of the same
+	 * URL: between two catalogue providers the tag is what tells them apart
+	 * (the Ads loader also matches the google-analytics pattern). Mirrors
+	 * _fazDeclaredOwnerRefusesTarget() in frontend/js/script.js.
+	 *
+	 * The plugin's own Google tag passes $read_body_urls = false: its markup
+	 * is verified to be exactly Google_Tag::render()'s, so its loader is
+	 * judged by its URL and its inline bootstrap by declared code signatures
+	 * only, the rule _fazShouldBlockScriptNode() applies to the same tags.
+	 *
+	 * @param string $attrs          Script tag attributes.
+	 * @param string $content        Inline script body.
+	 * @param bool   $read_body_urls Search a URL-less body for URL fragments.
+	 * @return bool
+	 */
+	private function declared_owner_refuses( $attrs, $content, $read_body_urls = true ) {
+		$consent = $this->get_service_consent();
+		if ( empty( $consent ) || ! in_array( 'no', $consent, true ) ) {
+			return false;
+		}
+		// Declared rows come from the cookie module. A process that booted
+		// Frontend without it (a CLI utility, a standalone harness) has none
+		// to read: answer "no declared refusal" instead of fataling, the same
+		// degradation get_declared_cookie_services() applies.
+		if ( null === $this->enforceable_cache && ! class_exists( '\\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Category_Controller' ) ) {
+			return false;
+		}
+		$ctx     = $this->get_provider_match_context( $attrs, $content );
+		$url_lc  = strtolower( (string) $ctx['url'] );
+		$body    = (string) $ctx['content'];
+		$body_lc = null;
+		foreach ( $this->get_enforceable_services() as $service ) {
+			if ( empty( $service['declared'] ) || empty( $service['id'] ) || ! isset( $consent[ $service['id'] ] ) || 'no' !== $consent[ $service['id'] ] ) {
+				continue;
+			}
+			foreach ( (array) $service['patterns'] as $pattern ) {
+				$pattern = (string) $pattern;
+				if ( '' === $pattern ) {
+					continue;
+				}
+				if ( '' !== $url_lc && $this->provider_pattern_matches_lc( $url_lc, strtolower( $pattern ) ) ) {
+					return true;
+				}
+				if ( ! self::is_url_fragment_pattern( $pattern ) ) {
+					if ( self::code_signature_in( $body, $pattern ) ) {
+						return true;
+					}
+					continue;
+				}
+				if ( $read_body_urls && '' === $url_lc && '' !== $body ) {
+					if ( null === $body_lc ) {
+						$body_lc = strtolower( $body );
+					}
+					if ( $this->provider_pattern_matches_lc( $body_lc, strtolower( $pattern ) ) ) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -14177,7 +14271,13 @@ class Frontend {
 			}
 		}
 		if ( false === $matched_category ) {
-			return false;
+			// No category pattern names the body, but the refusal of a declared
+			// row naming it still holds it — an inline loader building the URL
+			// of a row the visitor switched off. Only that refusal is asked
+			// here, so nothing else this filter used to leave alone changes;
+			// the fallback category is the one process_script_tag() uses for
+			// the same script, so the two layers agree.
+			return $this->declared_owner_refuses( $attrs, $body ) ? 'functional' : false;
 		}
 		$should_block = in_array( $matched_category, $blocked, true );
 		$svc_blocked = $this->check_per_service_blocking( $attrs, $body );

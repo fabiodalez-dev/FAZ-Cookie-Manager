@@ -30,7 +30,15 @@
  *      and a look-alike host are other trackers;
  *   8. a declared cookie row (#360) whose script pattern names the Google tag
  *      does not cancel the exemption, and still blocks once the visitor has
- *      switched that row's service off.
+ *      switched that row's service off;
+ *   9. that refusal also holds with the row's category ACCEPTED, where both
+ *      layers used to return on the allowed category before asking for it:
+ *      an inline loader is matched on the URL it builds, against declared
+ *      rows only;
+ *  10. the plugin's own Google tag (Google_Tag::render(), #371) honours the
+ *      same refusal of a declared row naming its loader URL, while a
+ *      catalogue owner of that URL still does not hold the other provider's
+ *      loader (the Ads loader is not parked by a google-analytics "no").
  *
  * Run: php tests/unit/test-gcm-advanced-bundled-tracker-php.php
  *  or: bash scripts/run-unit-tests.sh
@@ -133,8 +141,10 @@ namespace {
 	$root = dirname( __DIR__, 2 );
 	require_once $root . '/frontend/includes/class-embed-inventory.php';
 	require_once $root . '/frontend/class-frontend.php';
+	require_once $root . '/includes/class-google-tag.php';
 
 	use FazCookie\Frontend\Frontend;
+	use FazCookie\Includes\Google_Tag;
 
 	$run  = 0;
 	$fail = 0;
@@ -207,6 +217,10 @@ namespace {
 			}
 		}
 		$set['enforceable_cache'] = isset( $over['enforceable_cache'] ) ? $over['enforceable_cache'] : array();
+		// The categories the visitor has NOT accepted (default: a first visit).
+		if ( isset( $over['blocked_categories_cache'] ) ) {
+			$set['blocked_categories_cache'] = $over['blocked_categories_cache'];
+		}
 		foreach ( $set as $prop => $value ) {
 			$p = $rc->getProperty( $prop );
 			$p->setAccessible( true );
@@ -379,6 +393,104 @@ namespace {
 	);
 	b_ok( ! b_buffer_live( '<script>' . $gtag . 'bookingWidget({id:1});</script>' ), 'a declared row for another tracker still makes the bootstrap wait' );
 	b_ok( b_buffer_live( '<script>' . $gtag . '</script>' ), 'and leaves the bootstrap on its own alone' );
+	$GLOBALS['b_over'] = array();
+
+	echo "\na declared row's refusal holds with its category accepted\n";
+	$bare_loader = 'var s=document.createElement("script");s.src="https://www.googletagmanager.com/gtag/js?id=G-TEST1234";document.head.appendChild(s);';
+	$accepted    = array(
+		// Analytics accepted, Marketing not: the row's category is allowed.
+		'blocked_categories_cache' => array( 'marketing' ),
+		'provider_map_cache'       => array( 'googletagmanager.com' => 'analytics' ),
+		'pattern_service_cache'    => array( 'googletagmanager.com' => array( 'cookie-my-ga' ) ),
+		'enforceable_cache'        => array( $declared_row( 'cookie-my-ga', 'googletagmanager.com' ) ),
+	);
+	$GLOBALS['b_over'] = $accepted;
+	b_ok( b_buffer_live( $inline_loader ), 'no per-service choice: the inline loader runs (category accepted)' );
+	b_ok( b_filter_live( $bare_loader . $gtag ), 'inline-script filter: so does the loader body' );
+	$GLOBALS['b_over'] = $accepted + array( 'service_consent_cache' => array( 'cookie-my-ga' => 'yes' ) );
+	b_ok( b_buffer_live( $inline_loader ), 'the row accepted: the inline loader runs' );
+	b_ok( b_filter_live( $bare_loader . $gtag ), 'inline-script filter: the row accepted, the loader body runs' );
+
+	$GLOBALS['b_over'] = $accepted + array( 'service_consent_cache' => array( 'cookie-my-ga' => 'no' ) );
+	$out = b_call( b_frontend(), 'process_output_buffer', '<html><head>' . $inline_loader . '</head><body></body></html>' );
+	b_ok( false === strpos( $out, $inline_loader ) && 1 === preg_match( '/<script(?=[^>]*type="text\/plain")(?=[^>]*data-faz-category="[a-z]+")[^>]*>var s=/', $out ), 'the row refused: the inline loader is parked with a category' );
+	b_ok( ! b_buffer_live( '<script>' . $bare_loader . '</script>' ), 'the row refused: a loader body no category pattern matches is parked too' );
+	b_ok( ! b_filter_live( $bare_loader . $gtag ), 'inline-script filter: the row refused, the loader body is parked' );
+	b_ok( ! b_filter_live( $bare_loader ), 'inline-script filter: and so is a loader body no category pattern matches' );
+	b_ok( ! b_buffer_live( '<script>' . $gtm_body . '</script>', true ), 'the row refused: the container snippet is parked' );
+	b_ok( b_buffer_live( '<script>' . $gtag . '</script>' ), 'the row refused: a bootstrap that does not name the URL still runs' );
+	b_ok( b_buffer_live( '<script>var cfg={host:"notgoogletagmanager.com"};</script>' ), 'the row refused: a look-alike host in a body is not the row' );
+
+	// Only DECLARED owners are read in an inline body: catalogue URL patterns
+	// stay URL-only there (Rank Math's links object names youtu.be,
+	// facebook.com…; see inline_script_block_category()).
+	$GLOBALS['b_over'] = array(
+		'blocked_categories_cache' => array(),
+		'service_consent_cache'    => array( 'meta-pixel' => 'no' ),
+	);
+	b_ok( b_buffer_live( '<script>var links={fb:"https://connect.facebook.net/en_US/sdk.js"};</script>' ), 'a refused catalogue service named in a data-like body is not newly blocked' );
+	b_ok( b_filter_live( 'var links={fb:"https://connect.facebook.net/en_US/sdk.js"};' ), 'inline-script filter: nor there' );
+
+	echo "\nthe plugin's own Google tag (#371) and a declared row naming its URL\n";
+	$own      = Google_Tag::render( array( 'G-ABCD1234', 'AW-123456789' ), array( 'gtag_unblocked' => true ) );
+	$own_tags = array();
+	preg_match_all( '#<script[^>]*>.*?</script>#s', $own, $own_m );
+	foreach ( $own_m[0] as $own_tag ) {
+		$own_key              = ( false !== strpos( $own_tag, 'src=' ) ? 'loader:' : 'inline:' ) . ( false !== strpos( $own_tag, 'AW-' ) ? 'ads' : 'ga' );
+		$own_tags[ $own_key ] = $own_tag;
+	}
+	b_ok( 4 === count( $own_tags ), 'render() printed a loader and a bootstrap per provider' );
+	$own_page      = static function () use ( $own ) {
+		return b_call( b_frontend(), 'process_output_buffer', '<html><head>' . $own . '</head><body></body></html>' );
+	};
+	$own_live      = static function ( $out, $key ) use ( $own_tags ) {
+		return false !== strpos( $out, $own_tags[ $key ] );
+	};
+	$own_parked_as = static function ( $out, $id, $category ) {
+		return 1 === preg_match( '#<script(?=[^>]*type="text/plain")(?=[^>]*data-faz-category="' . $category . '")(?=[^>]*' . preg_quote( 'gtag/js?id=' . $id, '#' ) . ')[^>]*>#', $out );
+	};
+
+	$GLOBALS['b_over'] = array();
+	$out = $own_page();
+	b_ok( $own_live( $out, 'loader:ga' ) && $own_live( $out, 'loader:ads' ) && $own_live( $out, 'inline:ga' ) && $own_live( $out, 'inline:ads' ), 'no choice: all four scripts keep the exemption' );
+
+	$GLOBALS['b_over'] = array( 'service_consent_cache' => array( 'google-analytics' => 'no' ) );
+	$out = $own_page();
+	b_ok( ! $own_live( $out, 'loader:ga' ) && $own_live( $out, 'loader:ads' ), 'google-analytics refused: its loader is parked, the Ads loader is not (#371 unchanged)' );
+
+	$own_declared = array(
+		'pattern_service_cache' => array( 'googletagmanager.com' => array( 'cookie-my-ga' ) ),
+		'enforceable_cache'     => array( $declared_row( 'cookie-my-ga', 'googletagmanager.com' ) ),
+	);
+	$GLOBALS['b_over'] = $own_declared + array( 'service_consent_cache' => array( 'cookie-my-ga' => 'yes' ) );
+	$out = $own_page();
+	b_ok( $own_live( $out, 'loader:ga' ) && $own_live( $out, 'loader:ads' ), 'the declared row accepted: both loaders keep the exemption' );
+
+	$GLOBALS['b_over'] = $own_declared + array( 'service_consent_cache' => array( 'cookie-my-ga' => 'no' ) );
+	$out = $own_page();
+	b_ok( ! $own_live( $out, 'loader:ga' ) && $own_parked_as( $out, 'G-ABCD1234', 'analytics' ), 'the declared row refused: the GA4 loader is parked under Analytics' );
+	b_ok( ! $own_live( $out, 'loader:ads' ) && $own_parked_as( $out, 'AW-123456789', 'marketing' ), 'the declared row refused: the Ads loader is parked under Marketing' );
+
+	$GLOBALS['b_over'] = array(
+		'pattern_service_cache' => array( 'gtag/js?id=AW-123456789' => array( 'cookie-my-ads' ) ),
+		'enforceable_cache'     => array( $declared_row( 'cookie-my-ads', 'gtag/js?id=AW-123456789' ) ),
+		'service_consent_cache' => array( 'cookie-my-ads' => 'no' ),
+	);
+	$out = $own_page();
+	b_ok( ! $own_live( $out, 'loader:ads' ) && $own_live( $out, 'loader:ga' ), 'a refused row naming the Ads loader only parks that loader' );
+
+	$GLOBALS['b_over'] = array( 'service_consent_cache' => array( 'google-analytics' => 'no' ) );
+	$out = $own_page();
+	b_ok( ! $own_live( $out, 'inline:ga' ) && $own_live( $out, 'inline:ads' ), 'google-analytics refused: the Ads bootstrap is not held by it either' );
+
+	// The own inline bootstrap is matched by a declared CODE signature only.
+	$GLOBALS['b_over'] = array(
+		'pattern_service_cache' => array( 'gtag(' => array( 'cookie-gtag' ) ),
+		'enforceable_cache'     => array( $declared_row( 'cookie-gtag', 'gtag(' ) ),
+		'service_consent_cache' => array( 'cookie-gtag' => 'no' ),
+	);
+	$out = $own_page();
+	b_ok( ! $own_live( $out, 'inline:ga' ) && ! $own_live( $out, 'inline:ads' ), 'a refused declared `gtag(` row parks both bootstraps' );
 	$GLOBALS['b_over'] = array();
 
 	echo "\nadmin help\n";
