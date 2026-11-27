@@ -8987,6 +8987,15 @@ function _fazCategoryIsConfigured(slug) {
 function _fazShouldBlockScriptNode(node, category, target, serviceId) {
     var own = _fazOwnGoogleTagProvider(node);
     if (!own) return _fazShouldBlockResource(category, target, serviceId);
+    // A hand-declared service (#360) that names this URL and was refused holds
+    // the tag first, on every branch below: the parked copy, the released
+    // clone and, under Advanced Consent Mode, the live tag. The own-tag path
+    // reads its own provider's choice only, so that refusal was never asked
+    // and the restore queue released a script the visitor had switched off.
+    // Declared owners only, as for an element's own data-faz-service grant in
+    // _fazShouldBlockResource(): the catalogue google-analytics pattern also
+    // matches the Ads loader, and its refusal must not hold the Ads tag.
+    if (_fazDeclaredOwnerRefusesTarget(target)) return true;
     // The clone the restore queue just released (data-faz-executed): it was
     // judged with its full category before release, and
     // _fazBuildRestoredScript() then dropped data-faz-category. Re-deciding it

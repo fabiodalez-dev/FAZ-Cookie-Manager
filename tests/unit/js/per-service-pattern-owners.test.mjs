@@ -269,5 +269,64 @@ console.log('6. the service named on an entry is asked when no _services row lis
   }
 }
 
+console.log('7. the plugin\'s own Google tag honours a declared owner\'s refusal of its URL');
+// _fazShouldBlockScriptNode() judges the plugin's own gtag.js by its own
+// provider (google-analytics / google-ads) and never by URL, so the Ads loader
+// is not held by an Analytics refusal (#371 review). That also skipped the
+// hand-declared gtag_helper, which names the same URL: its "no" was never read
+// and the restore queue released the tag. Only declared owners are asked, as
+// for an element's own data-faz-service grant.
+{
+  const ADS = 'https://www.googletagmanager.com/gtag/js?id=AW-12345678';
+  /**
+   * A gtag.js script element as Google_Tag::render() prints it.
+   * @param {object} o
+   */
+  function ownTag(w, { src = GTAG, marker = 'google-analytics', category = '', service = null, executed = false } = {}) {
+    const el = w.__nativeCreateElement.call(w.document, 'script');
+    el.setAttribute('data-faz-google-tag', marker);
+    if (service !== null) el.setAttribute('data-faz-service', service);
+    if (category) el.setAttribute('data-faz-category', category);
+    if (executed) el.setAttribute('data-faz-executed', '1');
+    el.setAttribute('src', src);
+    w.__own = el;
+    return w.eval(`_fazOwnGoogleTagProvider(window.__own)`);
+  }
+  const blocksNode = (w, category, target, service) => w.eval(`_fazShouldBlockScriptNode(window.__own, ${JSON.stringify(category)}, ${JSON.stringify(target)}, ${JSON.stringify(service)})`);
+  const opts = { extraServices: [{ id: 'google-ads', label: 'google-ads', category: 'functional', patterns: ['googleadservices.example'], cookies: [], third_party: true }] };
+
+  {
+    const w = page(BASE + 'functional:yes,analytics:yes,svc.google-analytics:yes,svc.gtag_helper:no', false, opts);
+    check('precondition: the parked copy is recognised as the plugin\'s own tag', ownTag(w, { category: 'analytics', service: 'google-analytics' }) === 'google-analytics');
+    check('parked own tag, its own service on, the declared owner off: it stays parked', blocksNode(w, 'analytics', GTAG, 'google-analytics') === true);
+    ownTag(w, { service: 'google-analytics', executed: true });
+    check('…and the clone the restore queue released is held again', blocksNode(w, '', GTAG, 'google-analytics') === true);
+  }
+  {
+    const w = page(BASE + 'functional:yes,analytics:yes,svc.google-analytics:yes', false, opts);
+    ownTag(w, { category: 'analytics', service: 'google-analytics' });
+    check('control — no declared owner refused: the parked own tag is released', blocksNode(w, 'analytics', GTAG, 'google-analytics') === false);
+    ownTag(w, { service: 'google-analytics', executed: true });
+    check('control — and the released clone stays running', blocksNode(w, '', GTAG, 'google-analytics') === false);
+  }
+  {
+    const w = page(BASE + 'functional:no,analytics:no,svc.gtag_helper:no', true, opts);
+    ownTag(w);
+    check('Advanced mode, live own tag, the declared owner off: held, no exemption over the refusal', blocksNode(w, '', GTAG, '') === true);
+  }
+  {
+    const w = page(BASE + 'functional:no,analytics:no', true, opts);
+    ownTag(w);
+    check('control — Advanced mode, nothing refused: the exemption still lets the live tag run', blocksNode(w, '', GTAG, '') === false);
+  }
+  {
+    // The catalogue distinction stays: the Ads loader matches the
+    // google-analytics pattern, and an Analytics refusal does not hold it.
+    const w = page(BASE + 'functional:yes,analytics:no,svc.google-analytics:no', false, opts);
+    check('precondition: the Ads loader is recognised as the plugin\'s own Ads tag', ownTag(w, { src: ADS, marker: 'google-ads', category: 'functional', service: 'google-ads' }) === 'google-ads');
+    check('own Ads tag under a granted category, google-analytics off: released', blocksNode(w, 'functional', ADS, 'google-ads') === false);
+  }
+}
+
 console.log(`\nper-service-pattern-owners: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
