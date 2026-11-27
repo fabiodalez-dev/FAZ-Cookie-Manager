@@ -1065,6 +1065,29 @@ class Template {
 		if ( '' === $host ) {
 			return false;
 		}
+		$hosts = self::allowed_image_hosts( $url );
+		foreach ( is_array( $hosts ) ? $hosts : array() as $allowed ) {
+			if ( is_string( $allowed ) && '' !== $allowed && self::image_host( '//' . $allowed ) === $host ) {
+				return true;
+			}
+		}
+		// A filter that returns no list allows nothing, the lookup included.
+		return is_array( $hosts ) && self::is_media_library_image( $url );
+	}
+
+	/**
+	 * Hosts a banner image may be loaded from, as the filter leaves them.
+	 *
+	 * The site's own hosts (see is_first_party_image_url()) passed through
+	 * `faz_banner_image_hosts`. The cached template signs this list too
+	 * (get_layout_signature()): it is code, not a setting, so changing it
+	 * clears nothing, and without it in the signature a host taken off the
+	 * list kept its image in the stored template.
+	 *
+	 * @param string $url The image URL being checked.
+	 * @return mixed What the filter returned; anything but an array allows nothing.
+	 */
+	private static function allowed_image_hosts( $url ) {
 		$own = array();
 		foreach ( array( 'home_url', 'site_url' ) as $address ) {
 			if ( function_exists( $address ) ) {
@@ -1085,14 +1108,7 @@ class Template {
 		 * @param string[] $hosts Host names, lower case, without `www.`.
 		 * @param string   $url   The image URL being checked.
 		 */
-		$hosts = apply_filters( 'faz_banner_image_hosts', array_values( array_unique( $hosts ) ), $url );
-		foreach ( is_array( $hosts ) ? $hosts : array() as $allowed ) {
-			if ( is_string( $allowed ) && '' !== $allowed && self::image_host( '//' . $allowed ) === $host ) {
-				return true;
-			}
-		}
-		// A filter that returns no list allows nothing, the lookup included.
-		return is_array( $hosts ) && self::is_media_library_image( $url );
+		return apply_filters( 'faz_banner_image_hosts', array_values( array_unique( $hosts ) ), $url );
 	}
 
 	/**
@@ -1476,42 +1492,67 @@ class Template {
 			? $faz_settings['banner_control']
 			: array();
 
-		return md5(
-			wp_json_encode(
-				array(
-					// Bump the cache whenever the plugin updates: the generated
-					// template HTML (ids, classes, accordion structure) can change
-					// between releases, and the stored template must never outlive
-					// the JS that hydrates it. Without this a post-update install
-					// keeps serving the previous version's markup to the new
-					// script.js, silently breaking features such as the per-service
-					// sub-toggles (issue #146).
-					'plugin_version' => defined( 'FAZ_VERSION' ) ? FAZ_VERSION : 'dev',
-					'version'        => isset( $settings['versionID'] ) ? $settings['versionID'] : 'default',
-					'type'           => isset( $settings['type'] ) ? $settings['type'] : 'box',
-					'ptype'          => isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup',
-					'theme'          => isset( $settings['theme'] ) ? $settings['theme'] : 'light',
-					'law'            => isset( $settings['applicableLaw'] ) ? $settings['applicableLaw'] : 'gdpr',
-					// The notice button order rewrites the markup (#367).
-					'button_order'   => Banner::sanitize_button_order( isset( $settings['buttonOrder'] ) ? $settings['buttonOrder'] : '' ),
-					'do_not_sell'    => $do_not_sell,
-					'optout_popup'   => ! empty( $config['optoutPopup']['status'] ),
-					'revisit_status' => isset( $config['revisitConsent']['status'] ) ? (bool) $config['revisitConsent']['status'] : true,
-					'revisit_alternative' => ! empty( $config['revisitConsent']['verifiedAlternative'] ),
-					// Toggling per-service / per-cookie consent changes the
-					// preference-center structure, so it must invalidate the cache.
-					'per_service'    => ! empty( $banner_control['per_service_consent'] ),
-					'per_cookie'     => ! empty( $banner_control['per_cookie_consent'] ),
-					'description'    => md5( $notice_description ),
-					// The locale resolve_build_locale() picks drives the translated
-					// chrome (Always Active / audit-table headers). It can differ
-					// from $this->language (e.g. de_DE when the key is 'en'), so it
-					// must be in the signature or a WP locale switch would keep
-					// serving stale-language labels from cache. (CodeRabbit PR #164)
-					'build_locale'   => $this->resolve_build_locale(),
-				)
-			)
+		$signature = array(
+			// Bump the cache whenever the plugin updates: the generated
+			// template HTML (ids, classes, accordion structure) can change
+			// between releases, and the stored template must never outlive
+			// the JS that hydrates it. Without this a post-update install
+			// keeps serving the previous version's markup to the new
+			// script.js, silently breaking features such as the per-service
+			// sub-toggles (issue #146).
+			'plugin_version' => defined( 'FAZ_VERSION' ) ? FAZ_VERSION : 'dev',
+			'version'        => isset( $settings['versionID'] ) ? $settings['versionID'] : 'default',
+			'type'           => isset( $settings['type'] ) ? $settings['type'] : 'box',
+			'ptype'          => isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup',
+			'theme'          => isset( $settings['theme'] ) ? $settings['theme'] : 'light',
+			'law'            => isset( $settings['applicableLaw'] ) ? $settings['applicableLaw'] : 'gdpr',
+			// The notice button order rewrites the markup (#367).
+			'button_order'   => Banner::sanitize_button_order( isset( $settings['buttonOrder'] ) ? $settings['buttonOrder'] : '' ),
+			'do_not_sell'    => $do_not_sell,
+			'optout_popup'   => ! empty( $config['optoutPopup']['status'] ),
+			'revisit_status' => isset( $config['revisitConsent']['status'] ) ? (bool) $config['revisitConsent']['status'] : true,
+			'revisit_alternative' => ! empty( $config['revisitConsent']['verifiedAlternative'] ),
+			// Toggling per-service / per-cookie consent changes the
+			// preference-center structure, so it must invalidate the cache.
+			'per_service'    => ! empty( $banner_control['per_service_consent'] ),
+			'per_cookie'     => ! empty( $banner_control['per_cookie_consent'] ),
+			'description'    => md5( $notice_description ),
+			// The locale resolve_build_locale() picks drives the translated
+			// chrome (Always Active / audit-table headers). It can differ
+			// from $this->language (e.g. de_DE when the key is 'en'), so it
+			// must be in the signature or a WP locale switch would keep
+			// serving stale-language labels from cache. (CodeRabbit PR #164)
+			'build_locale'   => $this->resolve_build_locale(),
 		);
+		// Which custom images prepare_html() keeps depends on the host list
+		// of the `faz_banner_image_hosts` filter, which is code: editing it
+		// saves nothing and clears no cache. Signing the list each image is
+		// checked against makes the stored template follow it, so a host
+		// taken off the list stops being requested before consent at the
+		// next render, as the editor's warning (banner_image_warnings())
+		// already says. Only the filter is signed, not the Media Library
+		// lookup behind it: that one queries the database, and this runs on
+		// every page. A banner without a custom image keeps its signature.
+		$image_hosts = array();
+		$images      = array(
+			'brandLogo'      => isset( $config['notice']['elements']['brandLogo']['meta']['url'] ) ? $config['notice']['elements']['brandLogo']['meta']['url'] : '',
+			'revisitConsent' => isset( $config['revisitConsent']['meta']['url'] ) ? $config['revisitConsent']['meta']['url'] : '',
+		);
+		foreach ( $images as $image => $url ) {
+			$url = is_string( $url ) ? trim( $url ) : '';
+			if ( '' === $url || '#' === $url ) {
+				continue;
+			}
+			// Checked as prepare_html() checks it.
+			$url = esc_url_raw( $url, array( 'http', 'https' ) );
+			if ( '' !== self::image_host( $url ) ) {
+				$image_hosts[ $image ] = self::allowed_image_hosts( $url );
+			}
+		}
+		if ( $image_hosts ) {
+			$signature['image_hosts'] = md5( (string) wp_json_encode( $image_hosts ) );
+		}
+		return md5( wp_json_encode( $signature ) );
 	}
 
 	/**

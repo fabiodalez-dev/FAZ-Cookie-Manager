@@ -157,6 +157,21 @@ namespace {
 		public function __construct() {}
 
 		public function render( $revisit_url, $logo_url = '#' ) {
+			$this->configure( $revisit_url, $logo_url );
+			$method = new \ReflectionMethod( Template::class, 'prepare_html' );
+			$method->setAccessible( true );
+			return (string) $method->invoke( $this );
+		}
+
+		/** The signature load() compares the stored template's with. */
+		public function signature( $revisit_url, $logo_url = '#' ) {
+			$this->configure( $revisit_url, $logo_url );
+			$method = new \ReflectionMethod( Template::class, 'get_layout_signature' );
+			$method->setAccessible( true );
+			return (string) $method->invoke( $this );
+		}
+
+		private function configure( $revisit_url, $logo_url ) {
 			$this->template   = array(
 				'html' => '<div class="faz-btn-revisit-wrapper" data-faz-tag="revisit-consent"><button class="faz-btn-revisit"><img src="/wp-content/plugins/faz-cookie-manager/frontend/images/revisit.svg" alt="Revisit consent button"/></button></div>'
 					. '<div class="faz-consent-container"><div class="faz-consent-bar" data-faz-tag="notice"><div class="faz-custom-brand-logo-wrapper" data-faz-tag="brand-logo"><img src="" alt="Brand logo" class="faz-custom-brand-logo"/></div><p data-faz-tag="title">Title</p></div></div>',
@@ -175,9 +190,6 @@ namespace {
 					),
 				),
 			);
-			$method           = new \ReflectionMethod( Template::class, 'prepare_html' );
-			$method->setAccessible( true );
-			return (string) $method->invoke( $this );
 		}
 	}
 
@@ -386,6 +398,38 @@ namespace {
 	Template::is_first_party_image_url( 'https://shop.example/wp-content/uploads/2026/11/logo.png' );
 	t( array() === $GLOBALS['faz_test_get_posts'], 'a URL on the site is accepted without a Media Library query' );
 	$GLOBALS['faz_test_attachments'] = array();
+
+	echo "== The stored template follows the host filter ==\n";
+
+	// The filter is code: changing it saves nothing and clears no cache, so
+	// the stored template has to tell by its signature that its images were
+	// checked against another list.
+	$third = 'https://images.thirdparty.example/logo.png';
+	$GLOBALS['faz_test_filters']['faz_banner_image_hosts'] = function ( $hosts ) {
+		$hosts[] = 'images.thirdparty.example';
+		return $hosts;
+	};
+	$allowed = $template->signature( '#', $third );
+	t( $allowed === $template->signature( '#', $third ), 'the same list signs the same' );
+	$GLOBALS['faz_test_filters'] = array();
+	t( $allowed !== $template->signature( '#', $third ), 'a host taken off the list changes the signature, so load() rebuilds without its logo' );
+	$GLOBALS['faz_test_filters']['faz_banner_image_hosts'] = function ( $hosts ) {
+		$hosts[] = 'images.thirdparty.example';
+		return $hosts;
+	};
+	$revisit_allowed = $template->signature( 'https://images.thirdparty.example/widget.png' );
+	$GLOBALS['faz_test_filters']['faz_banner_image_hosts'] = function () {
+		return 'not-an-array';
+	};
+	t( $revisit_allowed !== $template->signature( 'https://images.thirdparty.example/widget.png' ), 'so does a filter that stops returning a list, for the revisit widget image too' );
+	$GLOBALS['faz_test_filters'] = array();
+	$plain_sig = $template->signature( '#' );
+	$GLOBALS['faz_test_filters']['faz_banner_image_hosts'] = function ( $hosts ) {
+		$hosts[] = 'images.thirdparty.example';
+		return $hosts;
+	};
+	t( $plain_sig === $template->signature( '#' ) && $plain_sig === $template->signature( '#', '/wp-content/uploads/logo.png' ), 'a banner without an image on a host, or with a path on the site, is not affected' );
+	$GLOBALS['faz_test_filters'] = array();
 
 	echo "== The editor is told which stored image is not shown ==\n";
 
