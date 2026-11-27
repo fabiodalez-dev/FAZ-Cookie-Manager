@@ -460,6 +460,8 @@ function updateConsentState(consentState) {
 // bundle had already restored (see the listeners below).
 function restoreBaseline() {
     restoredFromCookie = false;
+    // The baseline is now the state in force, not the banner's 'init' state.
+    endPreConsentState(null);
     // The region defaults, not a global denial (see baselineConsentState).
     var baseline = baselineConsentState();
     setNpaIfDenied(baseline.ad_storage);
@@ -503,6 +505,7 @@ document.addEventListener("fazcookie_consent_ready", function (event) {
     if (!current || !config._geoBootstrap) return;
     updateConsentState(buildConsentState(current));
     restoredFromCookie = true;
+    endPreConsentState(current);
     if (data.gacm_enabled && data.gacm_provider_ids) {
         setAdditionalConsent(current);
     }
@@ -545,6 +548,26 @@ document.addEventListener("fazcookie_consent_ready", function (event) {
 var lastPreConsentJson = "";
 var lastPreConsentState = null;
 var liveDenied = {};
+// The state pushed from 'init' stops being the one in force as soon as a
+// stored record is restored or the baseline is put back. Forget it then: a
+// later event without a cookie used to rebuild the state from that old
+// snapshot once restoreBaseline() had cleared restoredFromCookie, and so
+// granted again a category the stored record had denied. The JSON is cleared
+// with it, so a new 'init' is compared with nothing stale. What a restored
+// record denied joins liveDenied, so neither that new 'init' nor a later
+// event grants back, on this page view, a refusal the visitor recorded; a
+// stored record still decides on its own (it never goes through here).
+function endPreConsentState(record) {
+    lastPreConsentState = null;
+    lastPreConsentJson = "";
+    if (!record) return;
+    for (var slug in record) {
+        if (!Object.prototype.hasOwnProperty.call(record, slug) || FAZ_META_KEYS[slug]) continue;
+        if (slug !== "necessary" && record[slug] === "denied") liveDenied[slug] = true;
+    }
+}
+// A record restored in <head> (above) is a refusal of this page view too.
+if (restoredFromCookie) endPreConsentState(initialCookieObj);
 function preConsentStateFrom(detail) {
     var accepted = Array.isArray(detail.accepted) ? detail.accepted : [];
     var rejected = Array.isArray(detail.rejected) ? detail.rejected : [];
@@ -630,6 +653,7 @@ document.addEventListener("fazcookie_consent_update", function (event) {
     }
     updateConsentState(buildConsentState(updated));
     restoredFromCookie = true;
+    endPreConsentState(updated);
     // Also update GACM additional consent string if enabled.
     if (data.gacm_enabled && data.gacm_provider_ids) {
         setAdditionalConsent(updated);

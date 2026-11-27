@@ -341,6 +341,15 @@ namespace {
 	$keys = array_keys( $m );
 	ok( 1 === count( $keys ) && strlen( $keys[0] ) <= 190, 'an encoded key is still capped at 190 bytes' );
 	ok( 1 === count( $keys ) && 1 === preg_match( '/^ck\.acme\.(?:%[0-9A-F]{2})+~[0-9a-f]{16}$/', $keys[0] ), 'and the cap never leaves half an escape before the digest that ends a shortened key' );
+	// The head before the digest is 173 bytes. After the 8 of "ck.acme." that
+	// is 55 whole escapes, so the cut above never lands inside one. A 7-byte
+	// prefix makes it fall right after a "%", a 6-byte one after "%A": only
+	// the trim of a partial escape keeps those keys well-formed.
+	foreach ( array( 'ck.abc.', 'ck.ab.' ) as $prefix ) {
+		$m    = logged_map( $ctrl, 'cid-cut-' . strlen( $prefix ), array( $prefix . str_repeat( "\xC3\xA9", 200 ) => 'no' ) );
+		$keys = array_keys( $m );
+		ok( 1 === count( $keys ) && 1 === preg_match( '/^' . preg_quote( $prefix, '/' ) . '(?:%[0-9A-F]{2})+~[0-9a-f]{16}$/', $keys[0] ), 'a cut inside an escape leaves only whole escapes before the digest for ' . $prefix );
+	}
 
 	// Shortening must not merge two cookies. 31 x "é" + one letter is a 63-byte
 	// name; encoded it is 187 bytes after the 8 of "ck.acme.", so the old cut at
