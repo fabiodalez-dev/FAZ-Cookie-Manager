@@ -8701,7 +8701,13 @@ function _fazIsCategoryToBeBlocked(category) {
 var _fazPatternServiceMap = null;
 function _fazGetPatternServiceMap() {
     if (_fazPatternServiceMap) return _fazPatternServiceMap;
-    _fazPatternServiceMap = {};
+    // No prototype: the keys are patterns an administrator typed, and one
+    // spelled like an Object.prototype member ("constructor", "toString")
+    // read as an inherited function on a plain object. The build then called
+    // indexOf on it and threw, the half-built map stayed cached, and every
+    // later lookup of such a key (psMap[re] || []).slice() threw as well,
+    // aborting the consent decision for the script being judged.
+    _fazPatternServiceMap = Object.create(null);
     if (!_fazStore._services) return _fazPatternServiceMap;
     _fazStore._services.forEach(function(svc) {
         if (!svc.patterns) return;

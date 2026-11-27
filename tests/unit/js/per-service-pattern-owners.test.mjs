@@ -57,8 +57,13 @@ const GTAG = 'https://www.googletagmanager.com/gtag/js?id=G-ABCD1234';
  *
  * @param {string}  consent      Consent record pairs.
  * @param {boolean} gcmAdvanced  Advanced Consent Mode on.
+ * @param {object}  [opts]
+ * @param {string[]} [opts.omit]           Service ids left out of _services
+ *   (and _declaredServices) while their _providersToBlock entry stays.
+ * @param {object[]} [opts.extraServices]  Rows appended to _services.
+ * @param {object[]} [opts.extraProviders] Entries appended to _providersToBlock.
  */
-function page(consent, gcmAdvanced = false) {
+function page(consent, gcmAdvanced = false, { omit = [], extraServices = [], extraProviders = [] } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><head></head><body></body></html>', { runScripts: 'outside-only', url: 'https://shop.example.test/' });
   const { window: w } = dom;
   w.document.cookie = record(consent);
@@ -67,6 +72,7 @@ function page(consent, gcmAdvanced = false) {
   const helper = declared('yt_helper', 'analytics', 'youtube.com/embed');
   const gtagHelper = declared('gtag_helper', 'analytics', 'googletagmanager.com/gtag/js');
   const session = declared('booking_sess', 'functional', 'widget.sess.example');
+  const kept = (svc) => omit.indexOf(svc.id) === -1;
   w._fazConfig = {
     _categories: [
       { slug: 'necessary', isNecessary: true, defaultConsent: { gdpr: true, ccpa: true } },
@@ -79,14 +85,14 @@ function page(consent, gcmAdvanced = false) {
       detected('youtube', 'functional', 'youtube.com/embed'),
       detected('google-analytics', 'analytics', 'googletagmanager.com/gtag/js'),
       helper, gtagHelper, session,
-    ],
-    _declaredServices: [helper, gtagHelper, session],
+    ].filter(kept).concat(extraServices),
+    _declaredServices: [helper, gtagHelper, session].filter(kept),
     _providersToBlock: [
       { re: 'widget.booking.example', categories: ['functional'], service: 'booking_a' },
       { re: 'youtube.com/embed', categories: ['functional'], service: 'youtube' },
       { re: 'googletagmanager.com/gtag/js', categories: ['analytics'], service: 'google-analytics' },
       { re: 'widget.sess.example', categories: ['functional'], service: 'booking_sess' },
-    ],
+    ].concat(extraProviders),
     _cookieCategoryMap: {}, _whitelistedCookiePatterns: [], _userWhitelist: [],
     _perServiceConsent: true, _perCookieConsent: false, _rootDomain: '', _activeLaw: 'gdpr', _bannerSlug: 'gdpr', _expiry: 180,
     _gcmAdvanced: gcmAdvanced,
@@ -200,6 +206,40 @@ function saveThenInject(w, url) {
   check('control — nothing refused: the guard is removed', r.guardRemoved === true);
   check('control — and the observer disconnected', r.disconnected === true);
   check('control — the injected script is left alone', r.type !== 'javascript/blocked');
+}
+
+console.log('5. a pattern spelled like an Object.prototype member is an ordinary key');
+// The pattern map was a plain object, and the patterns are what an
+// administrator typed: "constructor" read as the inherited Object function,
+// indexOf was called on it, the build threw and left a half-built map cached.
+// A _providersToBlock entry whose `re` no service owned ("toString") then read
+// the inherited function too, and (psMap[re] || []).slice() threw.
+{
+  const odd = (id, pattern) => ({ id, label: id, category: 'analytics', patterns: [pattern], cookies: [id], third_party: false, declared: true });
+  const opts = {
+    extraServices: [odd('ctor_svc', 'constructor'), odd('proto_svc', '__proto__')],
+    extraProviders: [
+      { re: 'constructor', categories: ['analytics'], service: 'ctor_svc' },
+      { re: 'toString', categories: ['analytics'], service: '' },
+    ],
+  };
+  const w = page(BASE + 'functional:yes,analytics:yes,svc.ctor_svc:no', false, opts);
+  let threw = '';
+  let owners = null;
+  try { owners = w.eval('_fazGetPatternServiceMap()["constructor"]'); } catch (e) { threw = String(e && e.message || e); }
+  check('the pattern map builds without throwing', threw === '');
+  check('"constructor" maps to the service that names it', Array.isArray(owners) && owners.length === 1 && owners[0] === 'ctor_svc');
+  check('"__proto__" is a key of its own, too', w.eval('Array.isArray(_fazGetPatternServiceMap()["__proto__"]) && _fazGetPatternServiceMap()["__proto__"][0] === "proto_svc"'));
+  check('a key nobody declared ("toString") is absent, not inherited', w.eval('_fazGetPatternServiceMap()["toString"]') === undefined);
+  let answer = 'threw';
+  try { answer = w.eval('_fazGetServiceConsentForTarget("https://cdn.example.test/tostring/x.js")'); } catch (e) { answer = 'threw'; }
+  check('an entry whose pattern no service owns resolves without throwing', answer === '');
+  let blocked = 'threw';
+  try { blocked = blocksUrl(w, 'https://cdn.example.test/constructor/x.js'); } catch (e) { blocked = 'threw'; }
+  check('the refusal of the service named "constructor" blocks its script', blocked === true);
+  let refusedAny = 'threw';
+  try { refusedAny = w.eval('_fazAnyPatternServiceRefused()'); } catch (e) { refusedAny = 'threw'; }
+  check('…and keeps the interceptors in place', refusedAny === true);
 }
 
 console.log(`\nper-service-pattern-owners: ${passed} passed, ${failed} failed`);
