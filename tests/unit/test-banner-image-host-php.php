@@ -350,6 +350,24 @@ namespace {
 	// Found by the decoded name, still refused where WordPress does not serve it.
 	t( false === Template::is_first_party_image_url( 'https://images.thirdparty.example/wp-content/uploads/2026/11/' . rawurlencode( 'ロゴ' ) . '.png' ), 'the same encoded path on another host is refused' );
 	unset( $GLOBALS['faz_test_url_for'][46], $GLOBALS['faz_test_attachments'][46] );
+	// The substring walk has to go past its first page. Sixty attachments
+	// share the file name; the one the CDN URL shows is the 51st newest, and
+	// its stored path is nothing the exact lookup can rebuild from that URL.
+	$kept = $GLOBALS['faz_test_attachments'];
+	$GLOBALS['faz_test_attachments'] = array();
+	for ( $i = 0; $i < 60; $i++ ) {
+		$GLOBALS['faz_test_attachments'][ 200 + $i ] = array( 'file' => '2030/' . sprintf( '%02d', $i ) . '/brand.png', 'base' => 'https://shop.example/wp-content/uploads', 'sizes' => array() );
+	}
+	$GLOBALS['faz_test_attachments'][209] = array( 'file' => 'media/2019/03/brand.png', 'base' => $cdn . '/wp-content/uploads', 'sizes' => array() );
+	$paged = $cdn . '/o/a1b2c3/brand.png';
+	$GLOBALS['faz_test_url_for'][209] = $paged;
+	$GLOBALS['faz_test_get_posts']    = array();
+	t( 209 === Template::brand_logo_attachment_id( $paged ), 'the walk reaches a match on its second page (the 51st of 60 attachments of that name)' );
+	$second = array_filter( $GLOBALS['faz_test_get_posts'], function ( $query ) { return isset( $query['paged'] ) && 2 === (int) $query['paged']; } );
+	t( 1 === count( $second ), 'and it got there by reading the second page' );
+	t( $paged === logo_src( $template->render( '#', $paged ) ), 'so that logo is shown' );
+	unset( $GLOBALS['faz_test_url_for'][209] );
+	$GLOBALS['faz_test_attachments'] = $kept;
 	// A library that reuses a file name: the offloaded logo is older than
 	// more attachments of that name than one page of the lookup holds.
 	$kept = $GLOBALS['faz_test_attachments'];
