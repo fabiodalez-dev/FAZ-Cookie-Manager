@@ -1207,19 +1207,37 @@ class Template {
 		// tried, with and without the folder right before the file, in one
 		// exact IN query: at most twice the number of folders per name.
 		$segments = array_values( array_filter( explode( '/', (string) $path ), 'strlen' ) );
-		$dir      = array_slice( array_slice( $segments, 0, -1 ), -8 );
-		$layouts  = array( $dir );
-		if ( $dir ) {
-			$layouts[] = array_slice( $dir, 0, -1 );
+		$variants = array( array( $names, $segments ) );
+		// An offload host may serve a name with non-ASCII letters
+		// percent-encoded (`2026/11/%E3%83%AD%E3%82%B4.png`) while
+		// `_wp_attached_file` keeps it as uploaded (`2026/11/ロゴ.png`), and
+		// wp_basename() leaves the escapes in. So both lookups also try the
+		// decoded path and name. Only the lookup: whether the attachment is
+		// the one this URL shows is still decided by attachment_serves_url(),
+		// against the URL as WordPress serves it. A part that decodes to a
+		// slash or a control character is no file name; those are not tried.
+		$plain = array_map( 'rawurldecode', $segments );
+		if ( $plain !== $segments && ! preg_grep( '/[\/\\\\\x00-\x1f\x7f]/', $plain ) ) {
+			$variants[] = array( array_map( 'rawurldecode', $names ), $plain );
 		}
 		$stored = array();
-		foreach ( $names as $file ) {
-			foreach ( $layouts as $folders ) {
-				for ( $depth = count( $folders ); $depth >= 0; $depth-- ) {
-					$stored[] = implode( '/', array_merge( array_slice( $folders, count( $folders ) - $depth ), array( $file ) ) );
+		$names  = array();
+		foreach ( $variants as $variant ) {
+			$dir     = array_slice( array_slice( $variant[1], 0, -1 ), -8 );
+			$layouts = array( $dir );
+			if ( $dir ) {
+				$layouts[] = array_slice( $dir, 0, -1 );
+			}
+			foreach ( $variant[0] as $file ) {
+				$names[] = $file;
+				foreach ( $layouts as $folders ) {
+					for ( $depth = count( $folders ); $depth >= 0; $depth-- ) {
+						$stored[] = implode( '/', array_merge( array_slice( $folders, count( $folders ) - $depth ), array( $file ) ) );
+					}
 				}
 			}
 		}
+		$names = array_values( array_unique( $names ) );
 		$ids = get_posts(
 			array(
 				'post_type'      => 'attachment',

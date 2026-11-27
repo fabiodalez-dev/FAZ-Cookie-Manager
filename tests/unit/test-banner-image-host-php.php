@@ -339,6 +339,17 @@ namespace {
 		$html = $template->render( $url, $url );
 		t( false === strpos( $html, 'data-faz-tag="brand-logo"' ) && false === strpos( revisit_image( $html ), 'faz-revisit-custom-image' ), "$what: neither image is rendered" );
 	}
+	// An offload host that serves a non-ASCII file name percent-encoded,
+	// for a stored path kept as uploaded. Neither core nor the lookup by
+	// the encoded name finds it; the decoded path does.
+	$GLOBALS['faz_test_attachments'][46] = array( 'file' => '2026/11/ロゴ.png', 'base' => $cdn . '/wp-content/uploads', 'sizes' => array() );
+	$encoded = $cdn . '/wp-content/uploads/2026/11/' . rawurlencode( 'ロゴ' ) . '.png';
+	$GLOBALS['faz_test_url_for'][46] = $encoded;
+	t( 46 === Template::brand_logo_attachment_id( $encoded ), 'a percent-encoded offload URL of a non-ASCII file name finds its attachment' );
+	t( $encoded === logo_src( $template->render( '#', $encoded ) ), 'so that logo is shown' );
+	// Found by the decoded name, still refused where WordPress does not serve it.
+	t( false === Template::is_first_party_image_url( 'https://images.thirdparty.example/wp-content/uploads/2026/11/' . rawurlencode( 'ロゴ' ) . '.png' ), 'the same encoded path on another host is refused' );
+	unset( $GLOBALS['faz_test_url_for'][46], $GLOBALS['faz_test_attachments'][46] );
 	// A library that reuses a file name: the offloaded logo is older than
 	// more attachments of that name than one page of the lookup holds.
 	$kept = $GLOBALS['faz_test_attachments'];
