@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-11-27T16:56:07+00:00\n"
+"POT-Creation-Date: 2026-11-27T17:12:14+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -188,8 +188,8 @@ msgid "e.g. widget.provider.example/loader.js"
 msgstr "es. widget.provider.example/loader.js"
 
 #: admin/class-admin.php:634
-msgid "Part of the URL of the script (or iframe) that sets this cookie, at least four letters or digits, such as the provider's domain. Unless the cookie is in Necessary, anything matching it is blocked until the cookie's category is accepted and, with per-service consent on, for as long as the visitor keeps this cookie's own toggle off. Leave it empty and that toggle only deletes the cookie and holds back the opt-in script below: the script that sets the cookie keeps loading unless your own code checks window.getFazConsent().services first."
-msgstr "Parte dell'URL dello script (o dell'iframe) che imposta questo cookie, di almeno quattro lettere o cifre, come il dominio del fornitore. Salvo che il cookie sia tra i Necessari, tutto ciò che corrisponde viene bloccato finché la categoria del cookie non è accettata e, con il consenso per servizio attivo, finché il visitatore tiene spento l'interruttore di questo cookie. Se lo lasci vuoto, l'interruttore si limita a eliminare il cookie e a trattenere lo script di opt-in qui sotto: lo script che imposta il cookie continua a caricarsi, a meno che il tuo codice non controlli prima window.getFazConsent().services."
+msgid "Part of the URL of the script (or iframe) that sets this cookie, at least four letters or digits, such as the provider's domain, or the call that starts an inline script, such as fbq(. Unless the cookie is in Necessary, anything matching it is blocked until the cookie's category is accepted and, with per-service consent on, for as long as the visitor keeps this cookie's own toggle off. Leave it empty and that toggle only deletes the cookie and holds back the opt-in script below: the script that sets the cookie keeps loading unless your own code checks window.getFazConsent().services first."
+msgstr "Parte dell'URL dello script (o dell'iframe) che imposta questo cookie, di almeno quattro lettere o cifre, come il dominio del fornitore, oppure la chiamata che avvia uno script inline, come fbq(. Salvo che il cookie sia tra i Necessari, tutto ciò che corrisponde viene bloccato finché la categoria del cookie non è accettata e, con il consenso per servizio attivo, finché il visitatore tiene spento l'interruttore di questo cookie. Se lo lasci vuoto, l'interruttore si limita a eliminare il cookie e a trattenere lo script di opt-in qui sotto: lo script che imposta il cookie continua a caricarsi, a meno che il tuo codice non controlli prima window.getFazConsent().services."
 
 #: admin/class-admin.php:635
 msgid "Provider privacy policy URL"
@@ -2217,7 +2217,7 @@ msgid "Its GDPR setting is set to Yes, so it serves local copies of images and n
 msgstr "La sua opzione GDPR è impostata su Sì, quindi serve copie locali delle immagini e non contatta mai Instagram. Non resta nulla da bloccare: le tue impostazioni sui cookie non si applicano più a quel feed, e nemmeno l'accettazione di un visitatore ripristina il collegamento, perché la limitazione di Instagram Feed non dipende dal consenso."
 
 #: admin/class-admin.php:2146
-#: admin/modules/cookies/api/class-cookies-api.php:1191
+#: admin/modules/cookies/api/class-cookies-api.php:1195
 msgid "Open Instagram Feed settings"
 msgstr "Apri le impostazioni di Instagram Feed"
 
@@ -3689,63 +3689,63 @@ msgstr "Se i cookie sono stati aggiunti dallo scanner o meno."
 msgid "URL patterns for blocking purposes"
 msgstr "Pattern URL per il blocco"
 
-#: admin/modules/cookies/api/class-cookies-api.php:583
+#: admin/modules/cookies/api/class-cookies-api.php:587
 msgid "Third-country (Schrems II) personal-data transfer disclosure for this cookie."
 msgstr "Informativa sul trasferimento di dati personali verso Paesi terzi (Schrems II) per questo cookie."
 
-#: admin/modules/cookies/api/class-cookies-api.php:599
+#: admin/modules/cookies/api/class-cookies-api.php:603
 msgid "Stable key under which the public consent API (window.getFazConsent().services) reports this cookie. Derived from the slug, or the name when no slug is set."
 msgstr "Chiave stabile con cui l'API pubblica del consenso (window.getFazConsent().services) riporta questo cookie. Derivata dallo slug, o dal nome quando non è impostato uno slug."
 
-#: admin/modules/cookies/api/class-cookies-api.php:605
+#: admin/modules/cookies/api/class-cookies-api.php:609
 msgid "Link to the provider's own privacy policy, shown under the cookie in the banner and the cookie policy."
 msgstr "Link alla privacy policy del fornitore, mostrato sotto il cookie nel banner e nella cookie policy."
 
-#: admin/modules/cookies/api/class-cookies-api.php:621
+#: admin/modules/cookies/api/class-cookies-api.php:625
 msgid "Also run the opt-in script on every page load while the category stays accepted, not only when consent is given."
 msgstr "Esegui lo script di opt-in anche a ogni caricamento di pagina finché la categoria resta accettata, non solo quando viene dato il consenso."
 
-#: admin/modules/cookies/api/class-cookies-api.php:626
+#: admin/modules/cookies/api/class-cookies-api.php:630
 msgid "JavaScript executed when this cookie's category is accepted."
 msgstr "JavaScript eseguito quando la categoria di questo cookie viene accettata."
 
-#: admin/modules/cookies/api/class-cookies-api.php:642
+#: admin/modules/cookies/api/class-cookies-api.php:646
 msgid "JavaScript executed when this cookie's category is rejected or revoked."
 msgstr "JavaScript eseguito quando la categoria di questo cookie viene rifiutata o revocata."
 
-#: admin/modules/cookies/api/class-cookies-api.php:667
+#: admin/modules/cookies/api/class-cookies-api.php:671
 msgid "No cookies provided."
 msgstr "Nessun cookie fornito."
 
-#: admin/modules/cookies/api/class-cookies-api.php:739
+#: admin/modules/cookies/api/class-cookies-api.php:743
 msgid "No cookie IDs provided."
 msgstr "Nessun ID cookie fornito."
 
-#: admin/modules/cookies/api/class-cookies-api.php:834
+#: admin/modules/cookies/api/class-cookies-api.php:838
 msgid "The undo snapshot could not be saved, so nothing was deleted. The cookies were left in place."
 msgstr "Non è stato possibile salvare lo snapshot di annullamento, quindi non è stato eliminato nulla. I cookie sono stati lasciati al loro posto."
 
-#: admin/modules/cookies/api/class-cookies-api.php:967
+#: admin/modules/cookies/api/class-cookies-api.php:971
 msgid "There is no recently deleted batch to restore."
 msgstr "Non c'è nessun gruppo eliminato di recente da ripristinare."
 
-#: admin/modules/cookies/api/class-cookies-api.php:989
+#: admin/modules/cookies/api/class-cookies-api.php:993
 msgid "This batch contains opt-in/opt-out blocker scripts, which your account is not allowed to save. Restoring it would put the cookies back without their blocking behaviour, so the batch has been left in the recycle bin for an administrator to restore."
 msgstr "Questo gruppo contiene script di blocco opt-in/opt-out che il tuo account non è autorizzato a salvare. Ripristinarlo rimetterebbe i cookie senza il loro comportamento di blocco, quindi il gruppo è stato lasciato nel cestino perché lo ripristini un amministratore."
 
-#: admin/modules/cookies/api/class-cookies-api.php:1183
+#: admin/modules/cookies/api/class-cookies-api.php:1187
 msgid "Not applied"
 msgstr "Non applicata"
 
-#: admin/modules/cookies/api/class-cookies-api.php:1189
+#: admin/modules/cookies/api/class-cookies-api.php:1193
 msgid "Instagram Feed is set to serve local copies and contact nobody, so there is nothing left for this rule to block. Change its GDPR setting to Automatic or No to put this rule back in effect."
 msgstr "Instagram Feed è impostato per servire copie locali e non contattare nessuno, quindi non resta nulla che questa regola possa bloccare. Per rimetterla in funzione, imposta la sua opzione GDPR su Automatico oppure No."
 
-#: admin/modules/cookies/api/class-cookies-api.php:1291
+#: admin/modules/cookies/api/class-cookies-api.php:1295
 msgid "You do not have permission to modify script fields."
 msgstr "Non hai il permesso di modificare i campi script."
 
-#: admin/modules/cookies/api/class-cookies-api.php:1314
+#: admin/modules/cookies/api/class-cookies-api.php:1318
 msgid "The script URL pattern is too short: it would match almost every script on the site. Use a distinctive part of the script's URL, such as the provider's domain, or leave it empty."
 msgstr "Il pattern dell'URL dello script è troppo corto: corrisponderebbe a quasi tutti gli script del sito. Usa una parte distintiva dell'URL dello script, come il dominio del fornitore, oppure lascialo vuoto."
 
@@ -9382,6 +9382,9 @@ msgstr "Pulsante"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Collegamento"
+
+#~ msgid "Part of the URL of the script (or iframe) that sets this cookie, at least four letters or digits, such as the provider's domain. Unless the cookie is in Necessary, anything matching it is blocked until the cookie's category is accepted and, with per-service consent on, for as long as the visitor keeps this cookie's own toggle off. Leave it empty and that toggle only deletes the cookie and holds back the opt-in script below: the script that sets the cookie keeps loading unless your own code checks window.getFazConsent().services first."
+#~ msgstr "Parte dell'URL dello script (o dell'iframe) che imposta questo cookie, di almeno quattro lettere o cifre, come il dominio del fornitore. Salvo che il cookie sia tra i Necessari, tutto ciò che corrisponde viene bloccato finché la categoria del cookie non è accettata e, con il consenso per servizio attivo, finché il visitatore tiene spento l'interruttore di questo cookie. Se lo lasci vuoto, l'interruttore si limita a eliminare il cookie e a trattenere lo script di opt-in qui sotto: lo script che imposta il cookie continua a caricarsi, a meno che il tuo codice non controlli prima window.getFazConsent().services."
 
 #~ msgid "Part of the URL of the script (or iframe) that sets this cookie. Anything matching it is blocked until the cookie's category is accepted and, with per-service consent on, for as long as the visitor keeps this cookie's own toggle off. Leave it empty and that toggle only deletes the cookie and holds back the opt-in script below: the script that sets the cookie keeps loading unless your own code checks window.getFazConsent().services first."
 #~ msgstr "Parte dell'URL dello script (o dell'iframe) che imposta questo cookie. Tutto ciò che corrisponde viene bloccato finché la categoria del cookie non è accettata e, con il consenso per servizio attivo, finché il visitatore tiene spento l'interruttore di questo cookie. Se lo lasci vuoto, l'interruttore si limita a eliminare il cookie e a trattenere lo script di opt-in qui sotto: lo script che imposta il cookie continua a caricarsi, a meno che il tuo codice non controlli prima window.getFazConsent().services."

@@ -324,6 +324,14 @@ class Cookie extends Store {
 	 * least four letters or digits to name something specific; an empty one
 	 * means "no pattern" and is not too broad.
 	 *
+	 * A named call such as `fbq(`, `ga(` or Adobe's `s.t(` is the exception.
+	 * The same map judges inline scripts, where a pattern without a URL shape
+	 * is a code signature (Frontend::code_signature_in()), and a call names
+	 * the tracker's own entry point however short its name is. Treating such
+	 * a row as patternless would let the inline snippet it held back on 1.40.0
+	 * run before consent. It still needs two letters or digits, so `a(` or
+	 * `$(` is refused.
+	 *
 	 * @param string $pattern Pattern as stored.
 	 * @return boolean
 	 */
@@ -332,7 +340,12 @@ class Cookie extends Store {
 		if ( '' === $pattern ) {
 			return false;
 		}
-		return preg_match_all( '/[a-z0-9]/i', $pattern ) < 4;
+		$alnum = preg_match_all( '/[a-z0-9]/i', $pattern );
+		if ( $alnum >= 4 ) {
+			return false;
+		}
+		$is_named_call = 1 === preg_match( '/^[A-Za-z_$][A-Za-z0-9_$]*(?:\s*\.\s*[A-Za-z_$][A-Za-z0-9_$]*)*\s*\(/', $pattern );
+		return ! ( $is_named_call && $alnum >= 2 );
 	}
 
 	/**

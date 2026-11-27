@@ -683,18 +683,23 @@ assert_eq( array_keys( $map['services'] ), array( 'booking_sess' ), 'declared ma
 // would block almost every script on the site under the row's category, and
 // under per-service consent behind its toggle. Such a row works by name only.
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie as Edge_Cookie;
-foreach ( array( '/', 'js', ' .js ', 'a.b', '*/*', 'www' ) as $wide ) {
+foreach ( array( '/', 'js', ' .js ', 'a.b', '*/*', 'www', 'a(', '$(', '(', '.t(' ) as $wide ) {
 	assert_true( Edge_Cookie::is_too_broad_url_pattern( $wide ), 'too broad: "' . $wide . '" names no script' );
 }
-foreach ( array( '', 'gtag', 'widget.booking.example', 'cdn.example/app.js', 'hotjar' ) as $fine ) {
+// A named call is a code signature for inline scripts: `fbq(` or Adobe's
+// `s.t(` held the snippet back on 1.40.0 and must keep doing so.
+foreach ( array( '', 'gtag', 'widget.booking.example', 'cdn.example/app.js', 'hotjar', 'fbq(', 'ga(', 's.t(', 'ttq (' ) as $fine ) {
 	assert_false( Edge_Cookie::is_too_broad_url_pattern( $fine ), 'not too broad: "' . $fine . '"' );
 }
 $wide_row              = declared_row( 215, 'wide_sess', 4 );
 $wide_row->url_pattern = '/';
 $js_row                = declared_row( 216, 'js_sess', 4 );
 $js_row->url_pattern   = 'js';
-reset_inventory( $wpdb, array( $wide_row, $js_row, $with_pattern ) );
+$call_row              = declared_row( 217, 'fbq_sess', 4 );
+$call_row->url_pattern = 'fbq(';
+reset_inventory( $wpdb, array( $wide_row, $js_row, $call_row, $with_pattern ) );
 $map = $ctrl->get_declared_service_map();
+assert_eq( $map['services']['fbq_sess']['patterns'], array( 'fbq(' ), 'declared map: a short named call such as "fbq(" keeps holding its inline snippet' );
 assert_eq( $map['services']['wide_sess']['patterns'], array(), 'declared map: a "/" pattern gives the service no script pattern' );
 assert_eq( $map['services']['js_sess']['patterns'], array(), 'declared map: a "js" pattern gives the service no script pattern' );
 assert_eq( $map['services']['booking_sess']['patterns'], array( 'widget.booking.example' ), 'declared map: a distinctive pattern still comes through' );

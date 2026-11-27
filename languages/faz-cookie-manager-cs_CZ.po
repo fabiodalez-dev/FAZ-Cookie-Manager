@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-11-27T16:56:07+00:00\n"
+"POT-Creation-Date: 2026-11-27T17:12:14+00:00\n"
 "PO-Revision-Date: 2026-08-01 13:45+0200\n"
 "Last-Translator: \n"
 "Language-Team: Czech\n"
@@ -189,7 +189,7 @@ msgid "e.g. widget.provider.example/loader.js"
 msgstr ""
 
 #: admin/class-admin.php:634
-msgid "Part of the URL of the script (or iframe) that sets this cookie, at least four letters or digits, such as the provider's domain. Unless the cookie is in Necessary, anything matching it is blocked until the cookie's category is accepted and, with per-service consent on, for as long as the visitor keeps this cookie's own toggle off. Leave it empty and that toggle only deletes the cookie and holds back the opt-in script below: the script that sets the cookie keeps loading unless your own code checks window.getFazConsent().services first."
+msgid "Part of the URL of the script (or iframe) that sets this cookie, at least four letters or digits, such as the provider's domain, or the call that starts an inline script, such as fbq(. Unless the cookie is in Necessary, anything matching it is blocked until the cookie's category is accepted and, with per-service consent on, for as long as the visitor keeps this cookie's own toggle off. Leave it empty and that toggle only deletes the cookie and holds back the opt-in script below: the script that sets the cookie keeps loading unless your own code checks window.getFazConsent().services first."
 msgstr ""
 
 #: admin/class-admin.php:635
@@ -2218,7 +2218,7 @@ msgid "Its GDPR setting is set to Yes, so it serves local copies of images and n
 msgstr "Jeho nastavení GDPR je na hodnotě Ano, takže poskytuje lokální kopie obrázků a Instagram nikdy nekontaktuje. Není tedy co blokovat, a proto se vaše nastavení cookies na tento kanál nevztahuje — a ani souhlas návštěvníka spojení neobnoví, protože omezení Instagram Feed nezávisí na souhlasu."
 
 #: admin/class-admin.php:2146
-#: admin/modules/cookies/api/class-cookies-api.php:1191
+#: admin/modules/cookies/api/class-cookies-api.php:1195
 msgid "Open Instagram Feed settings"
 msgstr "Otevřít nastavení Instagram Feed"
 
@@ -3699,63 +3699,63 @@ msgstr "Zda byly cookies přidány ze skeneru nebo ne."
 msgid "URL patterns for blocking purposes"
 msgstr "URL vzory pro účely blokování"
 
-#: admin/modules/cookies/api/class-cookies-api.php:583
+#: admin/modules/cookies/api/class-cookies-api.php:587
 msgid "Third-country (Schrems II) personal-data transfer disclosure for this cookie."
 msgstr "Oznámení o předávání osobních údajů do třetích zemí (Schrems II) pro tyto cookies."
 
-#: admin/modules/cookies/api/class-cookies-api.php:599
+#: admin/modules/cookies/api/class-cookies-api.php:603
 msgid "Stable key under which the public consent API (window.getFazConsent().services) reports this cookie. Derived from the slug, or the name when no slug is set."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:605
+#: admin/modules/cookies/api/class-cookies-api.php:609
 msgid "Link to the provider's own privacy policy, shown under the cookie in the banner and the cookie policy."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:621
+#: admin/modules/cookies/api/class-cookies-api.php:625
 msgid "Also run the opt-in script on every page load while the category stays accepted, not only when consent is given."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:626
+#: admin/modules/cookies/api/class-cookies-api.php:630
 msgid "JavaScript executed when this cookie's category is accepted."
 msgstr "JavaScript spuštěný při přijetí kategorie tohoto souboru cookie."
 
-#: admin/modules/cookies/api/class-cookies-api.php:642
+#: admin/modules/cookies/api/class-cookies-api.php:646
 msgid "JavaScript executed when this cookie's category is rejected or revoked."
 msgstr "JavaScript spuštěný při odmítnutí nebo odvolání kategorie tohoto souboru cookie."
 
-#: admin/modules/cookies/api/class-cookies-api.php:667
+#: admin/modules/cookies/api/class-cookies-api.php:671
 msgid "No cookies provided."
 msgstr "Nebyly zadány žádné cookies."
 
-#: admin/modules/cookies/api/class-cookies-api.php:739
+#: admin/modules/cookies/api/class-cookies-api.php:743
 msgid "No cookie IDs provided."
 msgstr "Nebyla zadána žádná ID cookies."
 
-#: admin/modules/cookies/api/class-cookies-api.php:834
+#: admin/modules/cookies/api/class-cookies-api.php:838
 msgid "The undo snapshot could not be saved, so nothing was deleted. The cookies were left in place."
 msgstr "Snímek pro zpětné vrácení se nepodařilo uložit, a proto nebylo nic smazáno. Cookies zůstaly beze změny."
 
-#: admin/modules/cookies/api/class-cookies-api.php:967
+#: admin/modules/cookies/api/class-cookies-api.php:971
 msgid "There is no recently deleted batch to restore."
 msgstr "Není k dispozici žádná nedávno smazaná dávka k obnovení."
 
-#: admin/modules/cookies/api/class-cookies-api.php:989
+#: admin/modules/cookies/api/class-cookies-api.php:993
 msgid "This batch contains opt-in/opt-out blocker scripts, which your account is not allowed to save. Restoring it would put the cookies back without their blocking behaviour, so the batch has been left in the recycle bin for an administrator to restore."
 msgstr "Tato dávka obsahuje blokovací skripty opt-in/opt-out, které váš účet nemá oprávnění ukládat. Obnovení by vrátilo cookies zpět bez jejich blokovacího chování, proto byla dávka ponechána v koši, aby ji mohl obnovit administrátor."
 
-#: admin/modules/cookies/api/class-cookies-api.php:1183
+#: admin/modules/cookies/api/class-cookies-api.php:1187
 msgid "Not applied"
 msgstr "Neuplatněno"
 
-#: admin/modules/cookies/api/class-cookies-api.php:1189
+#: admin/modules/cookies/api/class-cookies-api.php:1193
 msgid "Instagram Feed is set to serve local copies and contact nobody, so there is nothing left for this rule to block. Change its GDPR setting to Automatic or No to put this rule back in effect."
 msgstr "Instagram Feed je nastaven na poskytování lokálních kopií a nikoho nekontaktuje, takže pro toto pravidlo není co blokovat. Chcete-li toto pravidlo znovu uvést v platnost, změňte jeho nastavení GDPR na Automaticky nebo Ne."
 
-#: admin/modules/cookies/api/class-cookies-api.php:1291
+#: admin/modules/cookies/api/class-cookies-api.php:1295
 msgid "You do not have permission to modify script fields."
 msgstr "Nemáte oprávnění upravovat pole skriptů."
 
-#: admin/modules/cookies/api/class-cookies-api.php:1314
+#: admin/modules/cookies/api/class-cookies-api.php:1318
 msgid "The script URL pattern is too short: it would match almost every script on the site. Use a distinctive part of the script's URL, such as the provider's domain, or leave it empty."
 msgstr ""
 

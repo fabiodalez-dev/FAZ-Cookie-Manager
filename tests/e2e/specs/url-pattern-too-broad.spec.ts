@@ -39,6 +39,13 @@ test.describe('Script URL pattern breadth', () => {
       expect(okId).toBeGreaterThan(0);
       created.push(okId);
 
+      // A short named call is a code signature for inline scripts, not a
+      // URL fragment: it names the tracker's entry point and is accepted.
+      const call = await fazApiPost<any>(page, nonce, 'cookies', { ...base, name: `${prefix}_call`, url_pattern: 'fbq(' });
+      expect([200, 201], 'a named call such as "fbq(" is accepted').toContain(call.status);
+      const callId = Number(call.data.id ?? call.data.cookie_id);
+      if (callId > 0) created.push(callId);
+
       const widened = await fazApiPut<any>(page, nonce, `cookies/${okId}`, { url_pattern: '/' });
       expect(widened.status).toBe(400);
 
