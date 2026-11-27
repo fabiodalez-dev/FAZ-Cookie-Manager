@@ -105,7 +105,12 @@ namespace {
 	}
 	function get_post_meta( $id, $key = '', $single = false ) { return ''; }
 	function do_shortcode( $html ) { return $html; }
-	function esc_url( $url ) { return (string) $url; }
+	// Like WordPress: for display each `&` becomes `&#038;`; the 'db'
+	// context (what esc_url_raw() is) leaves the URL as it is.
+	function esc_url( $url, $protocols = null, $_context = 'display' ) {
+		$url = esc_url_raw( $url, $protocols );
+		return 'display' === $_context ? preg_replace( '/&(?!#(?:\d+|x[a-f0-9]+);|[a-z1-4]{1,8};)/i', '&#038;', str_replace( '&amp;', '&#038;', $url ) ) : $url;
+	}
 	function esc_attr( $text ) { return htmlspecialchars( (string) $text, ENT_QUOTES ); }
 	// Like WordPress: a protocol outside the list empties the URL.
 	function esc_url_raw( $url, $protocols = null ) {
@@ -188,6 +193,19 @@ namespace {
 	function image_sources( $html ) {
 		preg_match_all( '/<img[^>]*\ssrc="([^"]*)"/', $html, $m );
 		return $m[1];
+	}
+	/** The brand logo's src as a browser reads it, entities decoded. */
+	function logo_src( $html ) {
+		$doc = new \DOMDocument();
+		libxml_use_internal_errors( true );
+		$doc->loadHTML( '<?xml encoding="utf-8"?><body>' . $html . '</body>' );
+		libxml_clear_errors();
+		foreach ( $doc->getElementsByTagName( 'img' ) as $img ) {
+			if ( false !== strpos( ' ' . $img->getAttribute( 'class' ) . ' ', ' faz-custom-brand-logo ' ) ) {
+				return $img->getAttribute( 'src' );
+			}
+		}
+		return null;
 	}
 	function revisit_image( $html ) {
 		return preg_match( '/<button class="faz-btn-revisit">\s*<img[^>]*>/', $html, $m ) ? $m[0] : '';
@@ -287,6 +305,12 @@ namespace {
 	t( false !== strpos( $html, 'data-faz-tag="brand-logo"' ) && in_array( $offloaded_logo, image_sources( $html ), true ), 'an offloaded Media Library logo is shown' );
 	t( in_array( $cdn . '/wp-content/uploads/2026/11/logo-300x100.png', image_sources( $template->render( '#', $cdn . '/wp-content/uploads/2026/11/logo-300x100.png' ) ), true ), 'one of its generated sizes too' );
 	t( in_array( $offloaded_logo . '?X-Amz-Signature=abc', image_sources( $template->render( '#', $offloaded_logo . '?X-Amz-Signature=abc' ) ), true ), 'and a signed URL of it' );
+	// A signed URL carries several parameters; the browser must get every
+	// `&` as it was signed, not `&#038;` (which a display escape before the
+	// DOM's own escaping left in the attribute).
+	$signed = $offloaded_logo . '?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=900&X-Amz-Signature=abc';
+	$src    = logo_src( $template->render( '#', $signed ) );
+	t( $signed === $src, "a signed URL with several parameters reaches the browser whole (got $src)" );
 	t( false !== strpos( revisit_image( $template->render( $cdn . '/wp-content/uploads/2026/11/widget.png' ) ), 'faz-revisit-custom-image' ), 'an offloaded revisit widget image is used' );
 	t( 41 === Template::brand_logo_attachment_id( $offloaded_logo ), 'and the attachment is found, so the logo keeps its alt text' );
 

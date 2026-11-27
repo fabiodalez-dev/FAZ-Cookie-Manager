@@ -1011,8 +1011,16 @@ class Template {
 	 */
 	public static function apply_brand_logo( $element, $url ) {
 		$logo_alt = self::brand_logo_alt( $url );
+		// The URL is sanitised as the revisit widget image is (esc_url_raw()
+		// is esc_url() in the 'db' context), not escaped for display: the DOM
+		// escapes the attribute itself when the template is saved. A display
+		// escape here turned each `&` into `&#038;` first, the DOM then wrote
+		// `&amp;#038;`, and a signed CDN URL (`?X-Amz-Expires=…&X-Amz-Signature=…`)
+		// reached the browser with its parameters broken, so the bucket
+		// refused the logo.
+		$src = esc_url( $url, array( 'http', 'https' ), 'db' );
 		foreach ( $element->getElementsByTagName( 'img' ) as $logo_img ) {
-			$logo_img->setAttribute( 'src', esc_url( $url ) );
+			$logo_img->setAttribute( 'src', $src );
 			if ( '' !== $logo_alt ) {
 				$logo_img->setAttribute( 'alt', $logo_alt );
 			}
