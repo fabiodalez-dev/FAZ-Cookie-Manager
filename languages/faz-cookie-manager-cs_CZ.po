@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-11-26T11:06:53+00:00\n"
+"POT-Creation-Date: 2026-11-27T16:56:07+00:00\n"
 "PO-Revision-Date: 2026-08-01 13:45+0200\n"
 "Last-Translator: \n"
 "Language-Team: Czech\n"
@@ -50,7 +50,7 @@ msgid "Cookie Banner"
 msgstr "Cookie Banner"
 
 #: admin/class-admin.php:317 admin/views/base.php:21
-#: frontend/class-frontend.php:4303
+#: frontend/class-frontend.php:4311
 #: frontend/modules/banner-rest/class-banner-rest.php:612
 msgid "Cookies"
 msgstr "Cookies"
@@ -189,7 +189,7 @@ msgid "e.g. widget.provider.example/loader.js"
 msgstr ""
 
 #: admin/class-admin.php:634
-msgid "Part of the URL of the script (or iframe) that sets this cookie. Anything matching it is blocked until the cookie's category is accepted and, with per-service consent on, for as long as the visitor keeps this cookie's own toggle off. Leave it empty and that toggle only deletes the cookie and holds back the opt-in script below: the script that sets the cookie keeps loading unless your own code checks window.getFazConsent().services first."
+msgid "Part of the URL of the script (or iframe) that sets this cookie, at least four letters or digits, such as the provider's domain. Unless the cookie is in Necessary, anything matching it is blocked until the cookie's category is accepted and, with per-service consent on, for as long as the visitor keeps this cookie's own toggle off. Leave it empty and that toggle only deletes the cookie and holds back the opt-in script below: the script that sets the cookie keeps loading unless your own code checks window.getFazConsent().services first."
 msgstr ""
 
 #: admin/class-admin.php:635
@@ -2218,7 +2218,7 @@ msgid "Its GDPR setting is set to Yes, so it serves local copies of images and n
 msgstr "Jeho nastavení GDPR je na hodnotě Ano, takže poskytuje lokální kopie obrázků a Instagram nikdy nekontaktuje. Není tedy co blokovat, a proto se vaše nastavení cookies na tento kanál nevztahuje — a ani souhlas návštěvníka spojení neobnoví, protože omezení Instagram Feed nezávisí na souhlasu."
 
 #: admin/class-admin.php:2146
-#: admin/modules/cookies/api/class-cookies-api.php:1190
+#: admin/modules/cookies/api/class-cookies-api.php:1191
 msgid "Open Instagram Feed settings"
 msgstr "Otevřít nastavení Instagram Feed"
 
@@ -3699,61 +3699,65 @@ msgstr "Zda byly cookies přidány ze skeneru nebo ne."
 msgid "URL patterns for blocking purposes"
 msgstr "URL vzory pro účely blokování"
 
-#: admin/modules/cookies/api/class-cookies-api.php:582
+#: admin/modules/cookies/api/class-cookies-api.php:583
 msgid "Third-country (Schrems II) personal-data transfer disclosure for this cookie."
 msgstr "Oznámení o předávání osobních údajů do třetích zemí (Schrems II) pro tyto cookies."
 
-#: admin/modules/cookies/api/class-cookies-api.php:598
+#: admin/modules/cookies/api/class-cookies-api.php:599
 msgid "Stable key under which the public consent API (window.getFazConsent().services) reports this cookie. Derived from the slug, or the name when no slug is set."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:604
+#: admin/modules/cookies/api/class-cookies-api.php:605
 msgid "Link to the provider's own privacy policy, shown under the cookie in the banner and the cookie policy."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:620
+#: admin/modules/cookies/api/class-cookies-api.php:621
 msgid "Also run the opt-in script on every page load while the category stays accepted, not only when consent is given."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:625
+#: admin/modules/cookies/api/class-cookies-api.php:626
 msgid "JavaScript executed when this cookie's category is accepted."
 msgstr "JavaScript spuštěný při přijetí kategorie tohoto souboru cookie."
 
-#: admin/modules/cookies/api/class-cookies-api.php:641
+#: admin/modules/cookies/api/class-cookies-api.php:642
 msgid "JavaScript executed when this cookie's category is rejected or revoked."
 msgstr "JavaScript spuštěný při odmítnutí nebo odvolání kategorie tohoto souboru cookie."
 
-#: admin/modules/cookies/api/class-cookies-api.php:666
+#: admin/modules/cookies/api/class-cookies-api.php:667
 msgid "No cookies provided."
 msgstr "Nebyly zadány žádné cookies."
 
-#: admin/modules/cookies/api/class-cookies-api.php:738
+#: admin/modules/cookies/api/class-cookies-api.php:739
 msgid "No cookie IDs provided."
 msgstr "Nebyla zadána žádná ID cookies."
 
-#: admin/modules/cookies/api/class-cookies-api.php:833
+#: admin/modules/cookies/api/class-cookies-api.php:834
 msgid "The undo snapshot could not be saved, so nothing was deleted. The cookies were left in place."
 msgstr "Snímek pro zpětné vrácení se nepodařilo uložit, a proto nebylo nic smazáno. Cookies zůstaly beze změny."
 
-#: admin/modules/cookies/api/class-cookies-api.php:966
+#: admin/modules/cookies/api/class-cookies-api.php:967
 msgid "There is no recently deleted batch to restore."
 msgstr "Není k dispozici žádná nedávno smazaná dávka k obnovení."
 
-#: admin/modules/cookies/api/class-cookies-api.php:988
+#: admin/modules/cookies/api/class-cookies-api.php:989
 msgid "This batch contains opt-in/opt-out blocker scripts, which your account is not allowed to save. Restoring it would put the cookies back without their blocking behaviour, so the batch has been left in the recycle bin for an administrator to restore."
 msgstr "Tato dávka obsahuje blokovací skripty opt-in/opt-out, které váš účet nemá oprávnění ukládat. Obnovení by vrátilo cookies zpět bez jejich blokovacího chování, proto byla dávka ponechána v koši, aby ji mohl obnovit administrátor."
 
-#: admin/modules/cookies/api/class-cookies-api.php:1182
+#: admin/modules/cookies/api/class-cookies-api.php:1183
 msgid "Not applied"
 msgstr "Neuplatněno"
 
-#: admin/modules/cookies/api/class-cookies-api.php:1188
+#: admin/modules/cookies/api/class-cookies-api.php:1189
 msgid "Instagram Feed is set to serve local copies and contact nobody, so there is nothing left for this rule to block. Change its GDPR setting to Automatic or No to put this rule back in effect."
 msgstr "Instagram Feed je nastaven na poskytování lokálních kopií a nikoho nekontaktuje, takže pro toto pravidlo není co blokovat. Chcete-li toto pravidlo znovu uvést v platnost, změňte jeho nastavení GDPR na Automaticky nebo Ne."
 
-#: admin/modules/cookies/api/class-cookies-api.php:1290
+#: admin/modules/cookies/api/class-cookies-api.php:1291
 msgid "You do not have permission to modify script fields."
 msgstr "Nemáte oprávnění upravovat pole skriptů."
+
+#: admin/modules/cookies/api/class-cookies-api.php:1314
+msgid "The script URL pattern is too short: it would match almost every script on the site. Use a distinctive part of the script's URL, such as the provider's domain, or leave it empty."
+msgstr ""
 
 #: admin/modules/gcm/api/class-api.php:138
 msgid "GCM status."
@@ -4472,7 +4476,7 @@ msgstr "Jazyk:"
 msgid "Notice Title"
 msgstr "Nadpis banneru"
 
-#: admin/views/banner.php:391 frontend/class-frontend.php:4298
+#: admin/views/banner.php:391 frontend/class-frontend.php:4306
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "We value your privacy"
 msgstr "Vážíme si vašeho soukromí"
@@ -4999,7 +5003,7 @@ msgstr "Text pro opt-out (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Text modálního okna «Předvolby odhlášení», které návštěvník uvidí po kliknutí na odkaz «Do Not Sell or Share My Personal Information». Zobrazuje se pouze u bannerů CCPA / zákonů států USA (a Obojí). Řídí se jazykem vybraným výše."
 
-#: admin/views/banner.php:1069 frontend/class-frontend.php:4300
+#: admin/views/banner.php:1069 frontend/class-frontend.php:4308
 #: frontend/modules/banner-rest/class-banner-rest.php:609
 msgid "Opt-out Preferences"
 msgstr "Předvolby odhlášení"
@@ -5009,7 +5013,7 @@ msgid "Opt-out Toggle Label"
 msgstr "Popisek přepínače opt-out"
 
 #: admin/views/banner.php:1093 includes/class-do-not-sell-shortcode.php:202
-#: includes/class-do-not-sell-shortcode.php:469
+#: includes/class-do-not-sell-shortcode.php:470
 msgid "Do Not Sell or Share My Personal Information"
 msgstr "Neprodávat ani nesdílet mé osobní údaje"
 
@@ -5363,7 +5367,7 @@ msgstr ""
 msgid "Date"
 msgstr "Datum"
 
-#: admin/views/consent-logs.php:87 frontend/class-frontend.php:4297
+#: admin/views/consent-logs.php:87 frontend/class-frontend.php:4305
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 #: includes/class-dsar-admin.php:139 includes/class-utils.php:1859
 #: includes/class-utils.php:1901
@@ -8132,86 +8136,86 @@ msgstr "{name} povoleno, zakázat {name}"
 msgid "{name} disabled, enable {name}"
 msgstr "{name} zakázáno, povolit {name}"
 
-#: frontend/class-frontend.php:4299
+#: frontend/class-frontend.php:4307
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 msgid "Your cookie preferences have been saved."
 msgstr "Vaše předvolby cookies byly uloženy."
 
-#: frontend/class-frontend.php:4301
+#: frontend/class-frontend.php:4309
 #: frontend/modules/banner-rest/class-banner-rest.php:610
 msgid "Customise Consent Preferences"
 msgstr "Přizpůsobit předvolby souhlasu"
 
-#: frontend/class-frontend.php:4302
+#: frontend/class-frontend.php:4310
 #: frontend/modules/banner-rest/class-banner-rest.php:611
 msgid "Service consent"
 msgstr "Souhlas se službou"
 
-#: frontend/class-frontend.php:4304
+#: frontend/class-frontend.php:4312
 #: frontend/modules/banner-rest/class-banner-rest.php:613
 msgid "Cookie consent"
 msgstr "Souhlas s cookies"
 
-#: frontend/class-frontend.php:4305
+#: frontend/class-frontend.php:4313
 #: frontend/modules/banner-rest/class-banner-rest.php:614
 msgid "Vendor consent"
 msgstr "Souhlas dodavatele"
 
-#: frontend/class-frontend.php:4306
+#: frontend/class-frontend.php:4314
 #: frontend/modules/banner-rest/class-banner-rest.php:615
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Tyto soubory cookie nastavuje vložená služba na své vlastní doméně a jejich chování lze řídit povolením nebo zablokováním výše uvedené vložené služby – nelze je odstranit jednotlivě."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:4310
+#: frontend/class-frontend.php:4318
 #: frontend/modules/banner-rest/class-banner-rest.php:620
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Potvrzuji, že mi je alespoň %d let"
 
-#: frontend/class-frontend.php:4311
+#: frontend/class-frontend.php:4319
 #: frontend/modules/banner-rest/class-banner-rest.php:621
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Potvrďte prosím, že splňujete minimální věk pro přijetí volitelných cookies."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:4318
+#: frontend/class-frontend.php:4326
 #: frontend/modules/banner-rest/class-banner-rest.php:623
 #, php-format
 msgid "Banner closes automatically in %d s..."
 msgstr "Banner se automaticky zavře za %d s..."
 
-#: frontend/class-frontend.php:4321
+#: frontend/class-frontend.php:4329
 #: frontend/modules/banner-rest/class-banner-rest.php:626
 msgid "Consent"
 msgstr "Souhlas"
 
-#: frontend/class-frontend.php:4322
+#: frontend/class-frontend.php:4330
 #: frontend/modules/banner-rest/class-banner-rest.php:627
 msgid "Cookie retention"
 msgstr "Doba uchování cookies"
 
-#: frontend/class-frontend.php:4323
+#: frontend/class-frontend.php:4331
 #: frontend/modules/banner-rest/class-banner-rest.php:628
 msgid "Features"
 msgstr "Funkce"
 
-#: frontend/class-frontend.php:4324
+#: frontend/class-frontend.php:4332
 #: frontend/modules/banner-rest/class-banner-rest.php:629
 msgid "Legitimate Interest"
 msgstr "Oprávněný zájem"
 
-#: frontend/class-frontend.php:4325
+#: frontend/class-frontend.php:4333
 #: frontend/modules/banner-rest/class-banner-rest.php:630
 msgid "Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing."
 msgstr "Někteří dodavatelé zpracovávají vaše údaje na základě oprávněného zájmu namísto souhlasu. Máte právo vznést námitku: vypnutím účelu vznesete námitku proti tomuto zpracování."
 
-#: frontend/class-frontend.php:4326
+#: frontend/class-frontend.php:4334
 #: frontend/modules/banner-rest/class-banner-rest.php:631
 msgid "IAB Vendor Consent"
 msgstr "Souhlas pro dodavatele IAB"
 
-#: frontend/class-frontend.php:4327
+#: frontend/class-frontend.php:4335
 #: frontend/modules/banner-rest/class-banner-rest.php:632
 msgid "Allow processing based on legitimate interest"
 msgstr "Povolit zpracování na základě oprávněného zájmu"
@@ -8245,8 +8249,8 @@ msgid "No active banner found."
 msgstr "Nebyl nalezen žádný aktivní banner."
 
 #: frontend/modules/consent-logger/class-consent-logger.php:689
-#: includes/class-do-not-sell-shortcode.php:553
-#: includes/class-do-not-sell-shortcode.php:636
+#: includes/class-do-not-sell-shortcode.php:554
+#: includes/class-do-not-sell-shortcode.php:637
 msgid "This request must originate from this website."
 msgstr "Tento požadavek musí pocházet z této webové stránky."
 
@@ -8478,12 +8482,12 @@ msgid "Other"
 msgstr "Jiné"
 
 #: includes/class-do-not-sell-shortcode.php:159
-#: includes/class-do-not-sell-shortcode.php:604
+#: includes/class-do-not-sell-shortcode.php:605
 msgid "Your opt-out request has been received. We will not sell or share your personal information."
 msgstr "Váš opt-out požadavek byl přijat. Vaše osobní údaje nebudeme prodávat ani sdílet."
 
 #: includes/class-do-not-sell-shortcode.php:160
-#: includes/class-do-not-sell-shortcode.php:670
+#: includes/class-do-not-sell-shortcode.php:671
 msgid "Your opt-out has been withdrawn. You may submit a new request at any time."
 msgstr "Vaše odhlášení bylo staženo. Novou žádost můžete podat kdykoli."
 
@@ -8528,22 +8532,22 @@ msgstr "Neplatný bezpečnostní token. Obnovte stránku a zkuste to znovu."
 msgid "The security token of the form had expired, so nothing has been changed yet. Use the button below to send your request again."
 msgstr ""
 
-#: includes/class-do-not-sell-shortcode.php:462
+#: includes/class-do-not-sell-shortcode.php:463
 msgid "Return to the previous page"
 msgstr ""
 
-#: includes/class-do-not-sell-shortcode.php:566
+#: includes/class-do-not-sell-shortcode.php:567
 msgid "You have already opted out. We will not sell or share your personal information."
 msgstr "Již jste se odhlásili. Vaše osobní údaje nebudeme prodávat ani sdílet."
 
 #. translators: %s: site name
-#: includes/class-do-not-sell-shortcode.php:1134
+#: includes/class-do-not-sell-shortcode.php:1135
 #, php-format
 msgid "[%s] New CCPA/CPRA Do Not Sell or Share Opt-Out Request"
 msgstr "[%s] Nový CCPA/CPRA opt-out požadavek \"Neprodávat ani nesdílet\""
 
 #. translators: 1: site name, 2: date/time, 3: IP hash
-#: includes/class-do-not-sell-shortcode.php:1137
+#: includes/class-do-not-sell-shortcode.php:1138
 #, php-format
 msgid ""
 "A visitor on %1$s has submitted a Do Not Sell or Share My Personal Information request.\n"

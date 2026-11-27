@@ -187,6 +187,11 @@ class Cookie_Controller extends Base_Controller {
 			// Same normalisation as Frontend::prepare_frontend_cookies(), so the
 			// string here is the very key the category map blocks under.
 			$pattern = sanitize_text_field( (string) $cookie->get_url_pattern() );
+			// Too broad to name one script (an older row, an import, a direct
+			// write): the toggle then works by name only, as without a pattern.
+			if ( Cookie::is_too_broad_url_pattern( $pattern ) ) {
+				$pattern = '';
+			}
 			if ( isset( $services[ $service_id ] ) ) {
 				if ( $services[ $service_id ]['category'] !== $cat_slug ) {
 					// A clash survives only on rows that have not been saved since it

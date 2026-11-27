@@ -315,6 +315,27 @@ class Cookie extends Store {
 	}
 
 	/**
+	 * Whether a script URL pattern is too broad to act on.
+	 *
+	 * The pattern is matched as a substring of every script and iframe URL on
+	 * the page, and it also feeds the category map: a row whose pattern is
+	 * "/" or "js" in a non-necessary category would hold back nearly every
+	 * script on the site until that category is accepted. A pattern needs at
+	 * least four letters or digits to name something specific; an empty one
+	 * means "no pattern" and is not too broad.
+	 *
+	 * @param string $pattern Pattern as stored.
+	 * @return boolean
+	 */
+	public static function is_too_broad_url_pattern( $pattern ) {
+		$pattern = trim( (string) $pattern );
+		if ( '' === $pattern ) {
+			return false;
+		}
+		return preg_match_all( '/[a-z0-9]/i', $pattern ) < 4;
+	}
+
+	/**
 	 * Return cookie meta data.
 	 *
 	 * Three key classes are handled distinctly on read:

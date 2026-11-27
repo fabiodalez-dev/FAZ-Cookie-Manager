@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.9.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-11-26T11:06:53+00:00\n"
+"POT-Creation-Date: 2026-11-27T16:56:07+00:00\n"
 "PO-Revision-Date: 2026-04-10\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: German\n"
@@ -49,7 +49,7 @@ msgid "Cookie Banner"
 msgstr "Cookie-Banner"
 
 #: admin/class-admin.php:317 admin/views/base.php:21
-#: frontend/class-frontend.php:4303
+#: frontend/class-frontend.php:4311
 #: frontend/modules/banner-rest/class-banner-rest.php:612
 msgid "Cookies"
 msgstr "Cookies"
@@ -188,7 +188,7 @@ msgid "e.g. widget.provider.example/loader.js"
 msgstr ""
 
 #: admin/class-admin.php:634
-msgid "Part of the URL of the script (or iframe) that sets this cookie. Anything matching it is blocked until the cookie's category is accepted and, with per-service consent on, for as long as the visitor keeps this cookie's own toggle off. Leave it empty and that toggle only deletes the cookie and holds back the opt-in script below: the script that sets the cookie keeps loading unless your own code checks window.getFazConsent().services first."
+msgid "Part of the URL of the script (or iframe) that sets this cookie, at least four letters or digits, such as the provider's domain. Unless the cookie is in Necessary, anything matching it is blocked until the cookie's category is accepted and, with per-service consent on, for as long as the visitor keeps this cookie's own toggle off. Leave it empty and that toggle only deletes the cookie and holds back the opt-in script below: the script that sets the cookie keeps loading unless your own code checks window.getFazConsent().services first."
 msgstr ""
 
 #: admin/class-admin.php:635
@@ -2217,7 +2217,7 @@ msgid "Its GDPR setting is set to Yes, so it serves local copies of images and n
 msgstr "Seine GDPR-Einstellung steht auf „Ja“, daher liefert es lokale Kopien der Bilder aus und kontaktiert Instagram nie. Es gibt somit nichts mehr zu blockieren, sodass Ihre Cookie-Einstellungen auf diesen Feed nicht zutreffen — und auch wenn ein Besucher akzeptiert, wird die Verbindung nicht wiederhergestellt, da die Einschränkung von Instagram Feed nicht von der Einwilligung abhängt."
 
 #: admin/class-admin.php:2146
-#: admin/modules/cookies/api/class-cookies-api.php:1190
+#: admin/modules/cookies/api/class-cookies-api.php:1191
 msgid "Open Instagram Feed settings"
 msgstr "Instagram-Feed-Einstellungen öffnen"
 
@@ -3689,61 +3689,65 @@ msgstr "Gibt an, ob Cookies vom Scanner hinzugefügt wurden oder nicht."
 msgid "URL patterns for blocking purposes"
 msgstr "URL-Muster für Blockierungszwecke"
 
-#: admin/modules/cookies/api/class-cookies-api.php:582
+#: admin/modules/cookies/api/class-cookies-api.php:583
 msgid "Third-country (Schrems II) personal-data transfer disclosure for this cookie."
 msgstr "Offenlegung der Übermittlung personenbezogener Daten in ein Drittland (Schrems II) für dieses Cookie."
 
-#: admin/modules/cookies/api/class-cookies-api.php:598
+#: admin/modules/cookies/api/class-cookies-api.php:599
 msgid "Stable key under which the public consent API (window.getFazConsent().services) reports this cookie. Derived from the slug, or the name when no slug is set."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:604
+#: admin/modules/cookies/api/class-cookies-api.php:605
 msgid "Link to the provider's own privacy policy, shown under the cookie in the banner and the cookie policy."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:620
+#: admin/modules/cookies/api/class-cookies-api.php:621
 msgid "Also run the opt-in script on every page load while the category stays accepted, not only when consent is given."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:625
+#: admin/modules/cookies/api/class-cookies-api.php:626
 msgid "JavaScript executed when this cookie's category is accepted."
 msgstr "JavaScript, das ausgeführt wird, wenn die Kategorie dieses Cookies akzeptiert wird."
 
-#: admin/modules/cookies/api/class-cookies-api.php:641
+#: admin/modules/cookies/api/class-cookies-api.php:642
 msgid "JavaScript executed when this cookie's category is rejected or revoked."
 msgstr "JavaScript, das ausgeführt wird, wenn die Kategorie dieses Cookies abgelehnt oder widerrufen wird."
 
-#: admin/modules/cookies/api/class-cookies-api.php:666
+#: admin/modules/cookies/api/class-cookies-api.php:667
 msgid "No cookies provided."
 msgstr "Keine Cookies angegeben."
 
-#: admin/modules/cookies/api/class-cookies-api.php:738
+#: admin/modules/cookies/api/class-cookies-api.php:739
 msgid "No cookie IDs provided."
 msgstr "Keine Cookie-IDs angegeben."
 
-#: admin/modules/cookies/api/class-cookies-api.php:833
+#: admin/modules/cookies/api/class-cookies-api.php:834
 msgid "The undo snapshot could not be saved, so nothing was deleted. The cookies were left in place."
 msgstr "Der Wiederherstellungs-Snapshot konnte nicht gespeichert werden, daher wurde nichts gelöscht. Die Cookies wurden unverändert belassen."
 
-#: admin/modules/cookies/api/class-cookies-api.php:966
+#: admin/modules/cookies/api/class-cookies-api.php:967
 msgid "There is no recently deleted batch to restore."
 msgstr "Es gibt keinen kürzlich gelöschten Stapel, der wiederhergestellt werden kann."
 
-#: admin/modules/cookies/api/class-cookies-api.php:988
+#: admin/modules/cookies/api/class-cookies-api.php:989
 msgid "This batch contains opt-in/opt-out blocker scripts, which your account is not allowed to save. Restoring it would put the cookies back without their blocking behaviour, so the batch has been left in the recycle bin for an administrator to restore."
 msgstr "Dieser Stapel enthält Opt-in/Opt-out-Blockierskripte, die Ihr Konto nicht speichern darf. Eine Wiederherstellung würde die Cookies ohne ihr Blockierverhalten zurücksetzen. Der Stapel wurde daher im Papierkorb belassen, damit ein Administrator ihn wiederherstellen kann."
 
-#: admin/modules/cookies/api/class-cookies-api.php:1182
+#: admin/modules/cookies/api/class-cookies-api.php:1183
 msgid "Not applied"
 msgstr "Nicht angewendet"
 
-#: admin/modules/cookies/api/class-cookies-api.php:1188
+#: admin/modules/cookies/api/class-cookies-api.php:1189
 msgid "Instagram Feed is set to serve local copies and contact nobody, so there is nothing left for this rule to block. Change its GDPR setting to Automatic or No to put this rule back in effect."
 msgstr "Instagram Feed ist so eingestellt, dass lokale Kopien bereitgestellt und niemand kontaktiert wird, sodass diese Regel nichts mehr zu blockieren hat. Ändern Sie die GDPR-Einstellung auf „Automatisch“ oder „Nein“, um diese Regel wieder in Kraft zu setzen."
 
-#: admin/modules/cookies/api/class-cookies-api.php:1290
+#: admin/modules/cookies/api/class-cookies-api.php:1291
 msgid "You do not have permission to modify script fields."
 msgstr "Du hast keine Berechtigung, Skriptfelder zu bearbeiten."
+
+#: admin/modules/cookies/api/class-cookies-api.php:1314
+msgid "The script URL pattern is too short: it would match almost every script on the site. Use a distinctive part of the script's URL, such as the provider's domain, or leave it empty."
+msgstr ""
 
 #: admin/modules/gcm/api/class-api.php:138
 msgid "GCM status."
@@ -4462,7 +4466,7 @@ msgstr "Sprache:"
 msgid "Notice Title"
 msgstr "Hinweistitel"
 
-#: admin/views/banner.php:391 frontend/class-frontend.php:4298
+#: admin/views/banner.php:391 frontend/class-frontend.php:4306
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "We value your privacy"
 msgstr "Wir schätzen Ihre Privatsphäre"
@@ -4989,7 +4993,7 @@ msgstr "Opt-out-Text (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Text für das Modal «Opt-out-Einstellungen», das ein Besucher nach dem Klick auf den Link «Do Not Sell or Share My Personal Information» sieht. Wird nur bei CCPA-/US-State-Laws-Bannern (und Beide) angezeigt. Folgt der oben ausgewählten Sprache."
 
-#: admin/views/banner.php:1069 frontend/class-frontend.php:4300
+#: admin/views/banner.php:1069 frontend/class-frontend.php:4308
 #: frontend/modules/banner-rest/class-banner-rest.php:609
 msgid "Opt-out Preferences"
 msgstr "Opt-out-Einstellungen"
@@ -4999,7 +5003,7 @@ msgid "Opt-out Toggle Label"
 msgstr "Beschriftung des Opt-out-Schalters"
 
 #: admin/views/banner.php:1093 includes/class-do-not-sell-shortcode.php:202
-#: includes/class-do-not-sell-shortcode.php:469
+#: includes/class-do-not-sell-shortcode.php:470
 msgid "Do Not Sell or Share My Personal Information"
 msgstr "Meine personenbezogenen Daten nicht verkaufen oder weitergeben"
 
@@ -5353,7 +5357,7 @@ msgstr ""
 msgid "Date"
 msgstr "Datum"
 
-#: admin/views/consent-logs.php:87 frontend/class-frontend.php:4297
+#: admin/views/consent-logs.php:87 frontend/class-frontend.php:4305
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 #: includes/class-dsar-admin.php:139 includes/class-utils.php:1859
 #: includes/class-utils.php:1901
@@ -8119,86 +8123,86 @@ msgstr "{name} aktiviert, {name} deaktivieren"
 msgid "{name} disabled, enable {name}"
 msgstr "{name} deaktiviert, {name} aktivieren"
 
-#: frontend/class-frontend.php:4299
+#: frontend/class-frontend.php:4307
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 msgid "Your cookie preferences have been saved."
 msgstr "Ihre Cookie-Einstellungen wurden gespeichert."
 
-#: frontend/class-frontend.php:4301
+#: frontend/class-frontend.php:4309
 #: frontend/modules/banner-rest/class-banner-rest.php:610
 msgid "Customise Consent Preferences"
 msgstr "Einwilligungseinstellungen anpassen"
 
-#: frontend/class-frontend.php:4302
+#: frontend/class-frontend.php:4310
 #: frontend/modules/banner-rest/class-banner-rest.php:611
 msgid "Service consent"
 msgstr "Dienst-Zustimmung"
 
-#: frontend/class-frontend.php:4304
+#: frontend/class-frontend.php:4312
 #: frontend/modules/banner-rest/class-banner-rest.php:613
 msgid "Cookie consent"
 msgstr "Cookie-Einwilligung"
 
-#: frontend/class-frontend.php:4305
+#: frontend/class-frontend.php:4313
 #: frontend/modules/banner-rest/class-banner-rest.php:614
 msgid "Vendor consent"
 msgstr "Anbieter-Einwilligung"
 
-#: frontend/class-frontend.php:4306
+#: frontend/class-frontend.php:4314
 #: frontend/modules/banner-rest/class-banner-rest.php:615
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Diese Cookies werden vom eingebetteten Dienst auf dessen eigener Domain gesetzt und über das Zulassen oder Blockieren der Einbettung oben gesteuert — einzeln können sie nicht entfernt werden."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:4310
+#: frontend/class-frontend.php:4318
 #: frontend/modules/banner-rest/class-banner-rest.php:620
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Ich bestätige, dass ich mindestens %d Jahre alt bin"
 
-#: frontend/class-frontend.php:4311
+#: frontend/class-frontend.php:4319
 #: frontend/modules/banner-rest/class-banner-rest.php:621
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Bitte bestätigen Sie, dass Sie das Mindestalter erreichen, um optionale Cookies zu akzeptieren."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:4318
+#: frontend/class-frontend.php:4326
 #: frontend/modules/banner-rest/class-banner-rest.php:623
 #, php-format
 msgid "Banner closes automatically in %d s..."
 msgstr "Banner schließt sich automatisch in %d s ..."
 
-#: frontend/class-frontend.php:4321
+#: frontend/class-frontend.php:4329
 #: frontend/modules/banner-rest/class-banner-rest.php:626
 msgid "Consent"
 msgstr "Einwilligung"
 
-#: frontend/class-frontend.php:4322
+#: frontend/class-frontend.php:4330
 #: frontend/modules/banner-rest/class-banner-rest.php:627
 msgid "Cookie retention"
 msgstr "Cookie-Speicherdauer"
 
-#: frontend/class-frontend.php:4323
+#: frontend/class-frontend.php:4331
 #: frontend/modules/banner-rest/class-banner-rest.php:628
 msgid "Features"
 msgstr "Funktionen"
 
-#: frontend/class-frontend.php:4324
+#: frontend/class-frontend.php:4332
 #: frontend/modules/banner-rest/class-banner-rest.php:629
 msgid "Legitimate Interest"
 msgstr "Berechtigtes Interesse"
 
-#: frontend/class-frontend.php:4325
+#: frontend/class-frontend.php:4333
 #: frontend/modules/banner-rest/class-banner-rest.php:630
 msgid "Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing."
 msgstr "Einige Anbieter verarbeiten Ihre Daten auf der Grundlage eines berechtigten Interesses statt einer Einwilligung. Sie haben ein Widerspruchsrecht: Deaktivieren Sie einen Zweck, um der betreffenden Verarbeitung zu widersprechen."
 
-#: frontend/class-frontend.php:4326
+#: frontend/class-frontend.php:4334
 #: frontend/modules/banner-rest/class-banner-rest.php:631
 msgid "IAB Vendor Consent"
 msgstr "IAB-Anbieter-Einwilligung"
 
-#: frontend/class-frontend.php:4327
+#: frontend/class-frontend.php:4335
 #: frontend/modules/banner-rest/class-banner-rest.php:632
 msgid "Allow processing based on legitimate interest"
 msgstr "Verarbeitung auf Grundlage des berechtigten Interesses zulassen"
@@ -8232,8 +8236,8 @@ msgid "No active banner found."
 msgstr "Kein aktives Banner gefunden."
 
 #: frontend/modules/consent-logger/class-consent-logger.php:689
-#: includes/class-do-not-sell-shortcode.php:553
-#: includes/class-do-not-sell-shortcode.php:636
+#: includes/class-do-not-sell-shortcode.php:554
+#: includes/class-do-not-sell-shortcode.php:637
 msgid "This request must originate from this website."
 msgstr "Diese Anfrage muss von dieser Website stammen."
 
@@ -8465,12 +8469,12 @@ msgid "Other"
 msgstr "Sonstiges"
 
 #: includes/class-do-not-sell-shortcode.php:159
-#: includes/class-do-not-sell-shortcode.php:604
+#: includes/class-do-not-sell-shortcode.php:605
 msgid "Your opt-out request has been received. We will not sell or share your personal information."
 msgstr "Ihre Opt-out-Anfrage wurde erhalten. Wir werden Ihre personenbezogenen Daten weder verkaufen noch weitergeben."
 
 #: includes/class-do-not-sell-shortcode.php:160
-#: includes/class-do-not-sell-shortcode.php:670
+#: includes/class-do-not-sell-shortcode.php:671
 msgid "Your opt-out has been withdrawn. You may submit a new request at any time."
 msgstr "Dein Opt-out wurde zurückgezogen. Du kannst jederzeit eine neue Anfrage einreichen."
 
@@ -8515,22 +8519,22 @@ msgstr "Ungültiges Sicherheits-Token. Bitte laden Sie die Seite neu und versuch
 msgid "The security token of the form had expired, so nothing has been changed yet. Use the button below to send your request again."
 msgstr ""
 
-#: includes/class-do-not-sell-shortcode.php:462
+#: includes/class-do-not-sell-shortcode.php:463
 msgid "Return to the previous page"
 msgstr ""
 
-#: includes/class-do-not-sell-shortcode.php:566
+#: includes/class-do-not-sell-shortcode.php:567
 msgid "You have already opted out. We will not sell or share your personal information."
 msgstr "Sie haben sich bereits abgemeldet. Wir werden Ihre personenbezogenen Daten weder verkaufen noch weitergeben."
 
 #. translators: %s: site name
-#: includes/class-do-not-sell-shortcode.php:1134
+#: includes/class-do-not-sell-shortcode.php:1135
 #, php-format
 msgid "[%s] New CCPA/CPRA Do Not Sell or Share Opt-Out Request"
 msgstr "[%s] Neue CCPA/CPRA-Opt-out-Anfrage „Nicht verkaufen oder weitergeben“"
 
 #. translators: 1: site name, 2: date/time, 3: IP hash
-#: includes/class-do-not-sell-shortcode.php:1137
+#: includes/class-do-not-sell-shortcode.php:1138
 #, php-format
 msgid ""
 "A visitor on %1$s has submitted a Do Not Sell or Share My Personal Information request.\n"

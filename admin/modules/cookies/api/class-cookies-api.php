@@ -574,9 +574,10 @@ class Cookies_API extends API_Controller {
 					'context'     => array( 'view', 'edit' ),
 				),
 				'url_pattern'    => array(
-					'description' => __( 'URL patterns for blocking purposes', 'faz-cookie-manager' ),
-					'type'        => 'string',
-					'context'     => array( 'view', 'edit' ),
+					'description'       => __( 'URL patterns for blocking purposes', 'faz-cookie-manager' ),
+					'type'              => 'string',
+					'context'           => array( 'view', 'edit' ),
+					'validate_callback' => array( __CLASS__, 'validate_url_pattern_field' ),
 				),
 				'transfer'       => array(
 					'description'       => __( 'Third-country (Schrems II) personal-data transfer disclosure for this cookie.', 'faz-cookie-manager' ),
@@ -1292,6 +1293,29 @@ class Cookies_API extends API_Controller {
 			);
 		}
 		return (string) $value;
+	}
+
+	/**
+	 * Refuse a script URL pattern too broad to name one script.
+	 *
+	 * @param mixed           $value   Submitted value.
+	 * @param WP_REST_Request $request Request.
+	 * @param string          $param   Parameter name.
+	 * @return true|WP_Error
+	 */
+	public static function validate_url_pattern_field( $value, $request = null, $param = 'url_pattern' ) {
+		$valid = rest_validate_request_arg( $value, $request, $param );
+		if ( true !== $valid ) {
+			return $valid;
+		}
+		if ( Cookie::is_too_broad_url_pattern( $value ) ) {
+			return new WP_Error(
+				'faz_url_pattern_too_broad',
+				__( 'The script URL pattern is too short: it would match almost every script on the site. Use a distinctive part of the script\'s URL, such as the provider\'s domain, or leave it empty.', 'faz-cookie-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+		return true;
 	}
 
 	/**

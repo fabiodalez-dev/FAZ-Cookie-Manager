@@ -11679,6 +11679,22 @@ class Frontend {
 	}
 
 	/**
+	 * Cookie::is_too_broad_url_pattern(), when the cookie module is loaded.
+	 *
+	 * Same guard as get_declared_cookie_services(): a process that boots
+	 * Frontend alone (a CLI utility, a standalone harness) keeps the pattern
+	 * as stored instead of fataling. Under the plugin autoloader the class
+	 * always resolves.
+	 *
+	 * @param string $pattern Pattern as stored.
+	 * @return boolean
+	 */
+	private static function is_too_broad_url_pattern( $pattern ) {
+		$cookie_class = '\\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Cookie';
+		return class_exists( $cookie_class ) && method_exists( $cookie_class, 'is_too_broad_url_pattern' ) && $cookie_class::is_too_broad_url_pattern( $pattern );
+	}
+
+	/**
 	 * Prepare preloaded cookie rows for frontend output and provider indexing.
 	 *
 	 * @param array  $items    Raw/prepared cookie rows.
@@ -11699,6 +11715,11 @@ class Frontend {
 				continue;
 			}
 			$provider = isset( $item->url_pattern ) ? sanitize_text_field( (string) $item->url_pattern ) : '';
+			// A pattern too broad to name one script would block nearly every
+			// script on the site under this category: ignored, as if empty.
+			if ( self::is_too_broad_url_pattern( $provider ) ) {
+				$provider = '';
+			}
 			$cookies[] = array(
 				'cookieID'    => $name,
 				'neverDelete' => self::is_wp_internal_cookie( $name ),
@@ -11740,13 +11761,17 @@ class Frontend {
 			if ( self::is_declaration_suppressed( $cookie->get_name() ) ) {
 				continue;
 			}
+			$provider = $cookie->get_url_pattern();
+			// Same rule as prepare_frontend_cookies(): too broad means none.
+			if ( self::is_too_broad_url_pattern( $provider ) ) {
+				$provider = '';
+			}
 			$cookies[] = array(
 				'cookieID'    => sanitize_text_field( $cookie->get_name() ),
 				'neverDelete' => self::is_wp_internal_cookie( $cookie->get_name() ),
 				'domain'      => sanitize_text_field( $cookie->get_domain() ),
-				'provider'    => sanitize_text_field( $cookie->get_url_pattern() ),
+				'provider'    => sanitize_text_field( $provider ),
 			);
-			$provider  = $cookie->get_url_pattern();
 			if ( '' !== $provider && 'necessary' !== $cat_slug ) {
 				if ( ! isset( $this->providers[ $provider ] ) ) {
 					$this->providers[ $provider ] = array();

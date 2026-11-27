@@ -573,6 +573,26 @@ $wpdb->detected_col = null;
 $malformed          = $method->invoke( $instance );
 assert_eq( $malformed, array(), 'get_detected_cookie_names: non-array get_col result → empty list (defensive cast)' );
 
+// 9b. prepare_frontend_cookies(): a too-broad url_pattern is neither handed to
+//     the client as the cookie's provider nor put in the category map that
+//     blocks scripts until the category is accepted.
+$prep = $ref->getMethod( 'prepare_frontend_cookies' );
+$prep->setAccessible( true );
+$prov = $ref->getProperty( 'providers' );
+$prov->setAccessible( true );
+$prov->setValue( $instance, array() );
+$rows = $prep->invoke(
+	$instance,
+	array(
+		array( 'name' => 'wide_one', 'url_pattern' => '/', 'domain' => '' ),
+		array( 'name' => 'js_one', 'url_pattern' => 'js', 'domain' => '' ),
+		array( 'name' => 'widget_one', 'url_pattern' => 'widget.booking.example', 'domain' => '' ),
+	),
+	'functional'
+);
+assert_eq( array_column( $rows, 'provider', 'cookieID' ), array( 'wide_one' => '', 'js_one' => '', 'widget_one' => 'widget.booking.example' ), 'prepare_frontend_cookies: too-broad patterns reach the client as no provider' );
+assert_eq( $prov->getValue( $instance ), array( 'widget.booking.example' => array( 'functional' ) ), 'prepare_frontend_cookies: only the distinctive pattern enters the category map' );
+
 // =========================================================================
 // 10. #365 review: get_declared_service_map() — the ONE answer to "which
 //     declared row is which service", read by the frontend, the scripts map
@@ -658,6 +678,26 @@ reset_inventory( $wpdb, array( $with_pattern ) );
 $GLOBALS['_transients']['faz_declared_services_v2'] = array( 'services' => array( 'stale' => array( 'id' => 'stale', 'label' => 'stale', 'category' => 'functional', 'cookies' => array( 'stale' ) ) ), 'by_cookie' => array() );
 $map = $ctrl->get_declared_service_map();
 assert_eq( array_keys( $map['services'] ), array( 'booking_sess' ), 'declared map: a v2 transient left by the previous version is ignored' );
+
+// 1.40 review follow-up: a pattern too broad to name one script ("/", "js")
+// would block almost every script on the site under the row's category, and
+// under per-service consent behind its toggle. Such a row works by name only.
+use FazCookie\Admin\Modules\Cookies\Includes\Cookie as Edge_Cookie;
+foreach ( array( '/', 'js', ' .js ', 'a.b', '*/*', 'www' ) as $wide ) {
+	assert_true( Edge_Cookie::is_too_broad_url_pattern( $wide ), 'too broad: "' . $wide . '" names no script' );
+}
+foreach ( array( '', 'gtag', 'widget.booking.example', 'cdn.example/app.js', 'hotjar' ) as $fine ) {
+	assert_false( Edge_Cookie::is_too_broad_url_pattern( $fine ), 'not too broad: "' . $fine . '"' );
+}
+$wide_row              = declared_row( 215, 'wide_sess', 4 );
+$wide_row->url_pattern = '/';
+$js_row                = declared_row( 216, 'js_sess', 4 );
+$js_row->url_pattern   = 'js';
+reset_inventory( $wpdb, array( $wide_row, $js_row, $with_pattern ) );
+$map = $ctrl->get_declared_service_map();
+assert_eq( $map['services']['wide_sess']['patterns'], array(), 'declared map: a "/" pattern gives the service no script pattern' );
+assert_eq( $map['services']['js_sess']['patterns'], array(), 'declared map: a "js" pattern gives the service no script pattern' );
+assert_eq( $map['services']['booking_sess']['patterns'], array( 'widget.booking.example' ), 'declared map: a distinctive pattern still comes through' );
 
 // Back to the inventory the checks below read.
 reset_inventory( $wpdb, array(
