@@ -242,5 +242,32 @@ console.log('5. a pattern spelled like an Object.prototype member is an ordinary
   check('…and keeps the interceptors in place', refusedAny === true);
 }
 
+console.log('6. the service named on an entry is asked when no _services row lists it');
+// An enforceable provider the scanner never saw (a block-first site, an embed
+// injected at runtime) has a _providersToBlock entry and no _services row, so
+// the pattern map has no owner for its pattern. Its svc.<id> choice is read
+// through the id on the entry, which _fazGetServiceConsentForTarget() adds to
+// the owners the map lists. #134/#146
+{
+  const omit = { omit: ['booking_sess'] };
+  {
+    const w = page(BASE + 'functional:no,analytics:no,svc.booking_sess:yes', false, omit);
+    check('precondition: no _services row, so the pattern map has no owner for it', w.eval('_fazGetPatternServiceMap()["widget.sess.example"]') === undefined);
+    check('precondition: the entry still names the service', w._fazConfig._providersToBlock.some((p) => p.service === 'booking_sess'));
+    check('the grant on the entry\'s service is read', w.eval(`_fazGetServiceConsentForTarget(${JSON.stringify(SESSION)})`) === 'yes');
+    check('…and releases the script under a denied category', blocksUrl(w, SESSION) === false);
+  }
+  {
+    const w = page(BASE + 'functional:yes,analytics:yes,svc.booking_sess:no', false, omit);
+    check('the refusal on the entry\'s service is read', w.eval(`_fazGetServiceConsentForTarget(${JSON.stringify(SESSION)})`) === 'no');
+    check('…and blocks the script under a granted category', blocksUrl(w, SESSION) === true);
+    const r = saveThenInject(w, SESSION);
+    check('every category granted, the unlisted service off: the save ran to the end', r.threw === '');
+    check('…the createElement guard stays', r.guardRemoved === false);
+    check('…the observer stays connected', r.disconnected === false);
+    check('…and its script injected after the save is parked', r.type === 'javascript/blocked');
+  }
+}
+
 console.log(`\nper-service-pattern-owners: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
