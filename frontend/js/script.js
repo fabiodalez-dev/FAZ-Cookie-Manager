@@ -8353,8 +8353,20 @@ function _fazUnblockServerSide() {
     // skipped: the held sheet stayed inert after the visitor accepted, until
     // the next page load. Whoever wrote the marker, what it holds is given
     // back by the rule below.
+    //
+    // A sheet that also carries data-faz-css is left to 4b. That happens when
+    // a held sheet later took a blocked append(): the attribute then holds the
+    // original of the WHOLE sheet, the held text included, while the live
+    // text carries the appended URL already neutralised. Reading the live
+    // text here after consent to the held URL alone, and writing it back,
+    // dropped the attribute with the only copy of the appended original, so
+    // a later consent to it had nothing to give back. 4b restores the sheet
+    // once every URL in that original is allowed, and the marker it brings
+    // back with it is stripped by this pass on the same run, which comes
+    // after 4b.
     document.querySelectorAll('style')
         .forEach(function (el) {
+            if (el.hasAttribute("data-faz-css")) return;
             var live = el.textContent || "";
             if (live.indexOf(_FAZ_HELD_CSS_URL) === -1) return;
             var css = live.split(_FAZ_HELD_CSS_URL).join("");
@@ -8689,7 +8701,13 @@ function _fazIsCategoryToBeBlocked(category) {
 var _fazPatternServiceMap = null;
 function _fazGetPatternServiceMap() {
     if (_fazPatternServiceMap) return _fazPatternServiceMap;
-    _fazPatternServiceMap = {};
+    // No prototype: the keys are patterns an administrator typed, and one
+    // spelled like an Object.prototype member ("constructor", "toString")
+    // read as an inherited function on a plain object. The build then called
+    // indexOf on it and threw, the half-built map stayed cached, and every
+    // later lookup of such a key (psMap[re] || []).slice() threw as well,
+    // aborting the consent decision for the script being judged.
+    _fazPatternServiceMap = Object.create(null);
     if (!_fazStore._services) return _fazPatternServiceMap;
     _fazStore._services.forEach(function(svc) {
         if (!svc.patterns) return;
@@ -8969,6 +8987,15 @@ function _fazCategoryIsConfigured(slug) {
 function _fazShouldBlockScriptNode(node, category, target, serviceId) {
     var own = _fazOwnGoogleTagProvider(node);
     if (!own) return _fazShouldBlockResource(category, target, serviceId);
+    // A hand-declared service (#360) that names this URL and was refused holds
+    // the tag first, on every branch below: the parked copy, the released
+    // clone and, under Advanced Consent Mode, the live tag. The own-tag path
+    // reads its own provider's choice only, so that refusal was never asked
+    // and the restore queue released a script the visitor had switched off.
+    // Declared owners only, as for an element's own data-faz-service grant in
+    // _fazShouldBlockResource(): the catalogue google-analytics pattern also
+    // matches the Ads loader, and its refusal must not hold the Ads tag.
+    if (_fazDeclaredOwnerRefusesTarget(target)) return true;
     // The clone the restore queue just released (data-faz-executed): it was
     // judged with its full category before release, and
     // _fazBuildRestoredScript() then dropped data-faz-category. Re-deciding it

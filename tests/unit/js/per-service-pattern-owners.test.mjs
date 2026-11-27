@@ -57,8 +57,13 @@ const GTAG = 'https://www.googletagmanager.com/gtag/js?id=G-ABCD1234';
  *
  * @param {string}  consent      Consent record pairs.
  * @param {boolean} gcmAdvanced  Advanced Consent Mode on.
+ * @param {object}  [opts]
+ * @param {string[]} [opts.omit]           Service ids left out of _services
+ *   (and _declaredServices) while their _providersToBlock entry stays.
+ * @param {object[]} [opts.extraServices]  Rows appended to _services.
+ * @param {object[]} [opts.extraProviders] Entries appended to _providersToBlock.
  */
-function page(consent, gcmAdvanced = false) {
+function page(consent, gcmAdvanced = false, { omit = [], extraServices = [], extraProviders = [] } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><head></head><body></body></html>', { runScripts: 'outside-only', url: 'https://shop.example.test/' });
   const { window: w } = dom;
   w.document.cookie = record(consent);
@@ -67,6 +72,7 @@ function page(consent, gcmAdvanced = false) {
   const helper = declared('yt_helper', 'analytics', 'youtube.com/embed');
   const gtagHelper = declared('gtag_helper', 'analytics', 'googletagmanager.com/gtag/js');
   const session = declared('booking_sess', 'functional', 'widget.sess.example');
+  const kept = (svc) => omit.indexOf(svc.id) === -1;
   w._fazConfig = {
     _categories: [
       { slug: 'necessary', isNecessary: true, defaultConsent: { gdpr: true, ccpa: true } },
@@ -79,14 +85,14 @@ function page(consent, gcmAdvanced = false) {
       detected('youtube', 'functional', 'youtube.com/embed'),
       detected('google-analytics', 'analytics', 'googletagmanager.com/gtag/js'),
       helper, gtagHelper, session,
-    ],
-    _declaredServices: [helper, gtagHelper, session],
+    ].filter(kept).concat(extraServices),
+    _declaredServices: [helper, gtagHelper, session].filter(kept),
     _providersToBlock: [
       { re: 'widget.booking.example', categories: ['functional'], service: 'booking_a' },
       { re: 'youtube.com/embed', categories: ['functional'], service: 'youtube' },
       { re: 'googletagmanager.com/gtag/js', categories: ['analytics'], service: 'google-analytics' },
       { re: 'widget.sess.example', categories: ['functional'], service: 'booking_sess' },
-    ],
+    ].concat(extraProviders),
     _cookieCategoryMap: {}, _whitelistedCookiePatterns: [], _userWhitelist: [],
     _perServiceConsent: true, _perCookieConsent: false, _rootDomain: '', _activeLaw: 'gdpr', _bannerSlug: 'gdpr', _expiry: 180,
     _gcmAdvanced: gcmAdvanced,
@@ -200,6 +206,126 @@ function saveThenInject(w, url) {
   check('control — nothing refused: the guard is removed', r.guardRemoved === true);
   check('control — and the observer disconnected', r.disconnected === true);
   check('control — the injected script is left alone', r.type !== 'javascript/blocked');
+}
+
+console.log('5. a pattern spelled like an Object.prototype member is an ordinary key');
+// The pattern map was a plain object, and the patterns are what an
+// administrator typed: "constructor" read as the inherited Object function,
+// indexOf was called on it, the build threw and left a half-built map cached.
+// A _providersToBlock entry whose `re` no service owned ("toString") then read
+// the inherited function too, and (psMap[re] || []).slice() threw.
+{
+  const odd = (id, pattern) => ({ id, label: id, category: 'analytics', patterns: [pattern], cookies: [id], third_party: false, declared: true });
+  const opts = {
+    extraServices: [odd('ctor_svc', 'constructor'), odd('proto_svc', '__proto__')],
+    extraProviders: [
+      { re: 'constructor', categories: ['analytics'], service: 'ctor_svc' },
+      { re: 'toString', categories: ['analytics'], service: '' },
+    ],
+  };
+  const w = page(BASE + 'functional:yes,analytics:yes,svc.ctor_svc:no', false, opts);
+  let threw = '';
+  let owners = null;
+  try { owners = w.eval('_fazGetPatternServiceMap()["constructor"]'); } catch (e) { threw = String(e && e.message || e); }
+  check('the pattern map builds without throwing', threw === '');
+  check('"constructor" maps to the service that names it', Array.isArray(owners) && owners.length === 1 && owners[0] === 'ctor_svc');
+  check('"__proto__" is a key of its own, too', w.eval('Array.isArray(_fazGetPatternServiceMap()["__proto__"]) && _fazGetPatternServiceMap()["__proto__"][0] === "proto_svc"'));
+  check('a key nobody declared ("toString") is absent, not inherited', w.eval('_fazGetPatternServiceMap()["toString"]') === undefined);
+  let answer = 'threw';
+  try { answer = w.eval('_fazGetServiceConsentForTarget("https://cdn.example.test/tostring/x.js")'); } catch (e) { answer = 'threw'; }
+  check('an entry whose pattern no service owns resolves without throwing', answer === '');
+  let blocked = 'threw';
+  try { blocked = blocksUrl(w, 'https://cdn.example.test/constructor/x.js'); } catch (e) { blocked = 'threw'; }
+  check('the refusal of the service named "constructor" blocks its script', blocked === true);
+  let refusedAny = 'threw';
+  try { refusedAny = w.eval('_fazAnyPatternServiceRefused()'); } catch (e) { refusedAny = 'threw'; }
+  check('…and keeps the interceptors in place', refusedAny === true);
+}
+
+console.log('6. the service named on an entry is asked when no _services row lists it');
+// An enforceable provider the scanner never saw (a block-first site, an embed
+// injected at runtime) has a _providersToBlock entry and no _services row, so
+// the pattern map has no owner for its pattern. Its svc.<id> choice is read
+// through the id on the entry, which _fazGetServiceConsentForTarget() adds to
+// the owners the map lists. #134/#146
+{
+  const omit = { omit: ['booking_sess'] };
+  {
+    const w = page(BASE + 'functional:no,analytics:no,svc.booking_sess:yes', false, omit);
+    check('precondition: no _services row, so the pattern map has no owner for it', w.eval('_fazGetPatternServiceMap()["widget.sess.example"]') === undefined);
+    check('precondition: the entry still names the service', w._fazConfig._providersToBlock.some((p) => p.service === 'booking_sess'));
+    check('the grant on the entry\'s service is read', w.eval(`_fazGetServiceConsentForTarget(${JSON.stringify(SESSION)})`) === 'yes');
+    check('…and releases the script under a denied category', blocksUrl(w, SESSION) === false);
+  }
+  {
+    const w = page(BASE + 'functional:yes,analytics:yes,svc.booking_sess:no', false, omit);
+    check('the refusal on the entry\'s service is read', w.eval(`_fazGetServiceConsentForTarget(${JSON.stringify(SESSION)})`) === 'no');
+    check('…and blocks the script under a granted category', blocksUrl(w, SESSION) === true);
+    const r = saveThenInject(w, SESSION);
+    check('every category granted, the unlisted service off: the save ran to the end', r.threw === '');
+    check('…the createElement guard stays', r.guardRemoved === false);
+    check('…the observer stays connected', r.disconnected === false);
+    check('…and its script injected after the save is parked', r.type === 'javascript/blocked');
+  }
+}
+
+console.log('7. the plugin\'s own Google tag honours a declared owner\'s refusal of its URL');
+// _fazShouldBlockScriptNode() judges the plugin's own gtag.js by its own
+// provider (google-analytics / google-ads) and never by URL, so the Ads loader
+// is not held by an Analytics refusal (#371 review). That also skipped the
+// hand-declared gtag_helper, which names the same URL: its "no" was never read
+// and the restore queue released the tag. Only declared owners are asked, as
+// for an element's own data-faz-service grant.
+{
+  const ADS = 'https://www.googletagmanager.com/gtag/js?id=AW-12345678';
+  /**
+   * A gtag.js script element as Google_Tag::render() prints it.
+   * @param {object} o
+   */
+  function ownTag(w, { src = GTAG, marker = 'google-analytics', category = '', service = null, executed = false } = {}) {
+    const el = w.__nativeCreateElement.call(w.document, 'script');
+    el.setAttribute('data-faz-google-tag', marker);
+    if (service !== null) el.setAttribute('data-faz-service', service);
+    if (category) el.setAttribute('data-faz-category', category);
+    if (executed) el.setAttribute('data-faz-executed', '1');
+    el.setAttribute('src', src);
+    w.__own = el;
+    return w.eval(`_fazOwnGoogleTagProvider(window.__own)`);
+  }
+  const blocksNode = (w, category, target, service) => w.eval(`_fazShouldBlockScriptNode(window.__own, ${JSON.stringify(category)}, ${JSON.stringify(target)}, ${JSON.stringify(service)})`);
+  const opts = { extraServices: [{ id: 'google-ads', label: 'google-ads', category: 'functional', patterns: ['googleadservices.example'], cookies: [], third_party: true }] };
+
+  {
+    const w = page(BASE + 'functional:yes,analytics:yes,svc.google-analytics:yes,svc.gtag_helper:no', false, opts);
+    check('precondition: the parked copy is recognised as the plugin\'s own tag', ownTag(w, { category: 'analytics', service: 'google-analytics' }) === 'google-analytics');
+    check('parked own tag, its own service on, the declared owner off: it stays parked', blocksNode(w, 'analytics', GTAG, 'google-analytics') === true);
+    ownTag(w, { service: 'google-analytics', executed: true });
+    check('…and the clone the restore queue released is held again', blocksNode(w, '', GTAG, 'google-analytics') === true);
+  }
+  {
+    const w = page(BASE + 'functional:yes,analytics:yes,svc.google-analytics:yes', false, opts);
+    ownTag(w, { category: 'analytics', service: 'google-analytics' });
+    check('control — no declared owner refused: the parked own tag is released', blocksNode(w, 'analytics', GTAG, 'google-analytics') === false);
+    ownTag(w, { service: 'google-analytics', executed: true });
+    check('control — and the released clone stays running', blocksNode(w, '', GTAG, 'google-analytics') === false);
+  }
+  {
+    const w = page(BASE + 'functional:no,analytics:no,svc.gtag_helper:no', true, opts);
+    ownTag(w);
+    check('Advanced mode, live own tag, the declared owner off: held, no exemption over the refusal', blocksNode(w, '', GTAG, '') === true);
+  }
+  {
+    const w = page(BASE + 'functional:no,analytics:no', true, opts);
+    ownTag(w);
+    check('control — Advanced mode, nothing refused: the exemption still lets the live tag run', blocksNode(w, '', GTAG, '') === false);
+  }
+  {
+    // The catalogue distinction stays: the Ads loader matches the
+    // google-analytics pattern, and an Analytics refusal does not hold it.
+    const w = page(BASE + 'functional:yes,analytics:no,svc.google-analytics:no', false, opts);
+    check('precondition: the Ads loader is recognised as the plugin\'s own Ads tag', ownTag(w, { src: ADS, marker: 'google-ads', category: 'functional', service: 'google-ads' }) === 'google-ads');
+    check('own Ads tag under a granted category, google-analytics off: released', blocksNode(w, 'functional', ADS, 'google-ads') === false);
+  }
 }
 
 console.log(`\nper-service-pattern-owners: ${passed} passed, ${failed} failed`);

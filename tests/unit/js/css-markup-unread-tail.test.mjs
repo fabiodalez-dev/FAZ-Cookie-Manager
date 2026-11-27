@@ -44,7 +44,7 @@ function safe(fn, fallback) { try { return fn(); } catch (e) { return fallback; 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const HELD = 'about:invalid#faz-held:';
 
-function runtime({ aggressive = true } = {}) {
+function runtime({ aggressive = true, second = false } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><head></head><body></body></html>', {
     runScripts: 'outside-only', url: 'https://site.test/',
   });
@@ -55,9 +55,10 @@ function runtime({ aggressive = true } = {}) {
     _categories: [
       { slug: 'necessary', isNecessary: true, ccpaDoNotSell: false, defaultConsent: { gdpr: true, ccpa: true } },
       { slug: 'marketing', isNecessary: false, ccpaDoNotSell: false, defaultConsent: { gdpr: false, ccpa: true } },
-    ],
+    ].concat(second ? [{ slug: 'analytics', isNecessary: false, ccpaDoNotSell: false, defaultConsent: { gdpr: false, ccpa: true } }] : []),
     _services: [],
-    _providersToBlock: [{ re: 'tracker.test', categories: ['marketing'], service: 'tracker' }],
+    _providersToBlock: [{ re: 'tracker.test', categories: ['marketing'], service: 'tracker' }]
+      .concat(second ? [{ re: 'other.test', categories: ['analytics'], service: 'other' }] : []),
     _cookieCategoryMap: {}, _whitelistedCookiePatterns: [], _userWhitelist: [],
     _perServiceConsent: false, _perCookieConsent: false, _rootDomain: '', _consentRevision: 1,
     _ageGate: { enabled: false },
@@ -275,6 +276,41 @@ console.log('\nruntime: consent hands a held style attribute back');
   ok('with consent the unquoted url() is back as written', bare.getAttribute('style') === 'background:url(https://tracker.test/x.png)');
   ok('with consent the quoted url() is back as written', quoted.getAttribute('style') === 'color:red;background-image:url("https://tracker.test/y.png")');
   ok('nothing in the document still carries the marker', w.document.documentElement.outerHTML.indexOf(HELD) === -1);
+}
+
+// A held sheet can still be written to. A blocked append() parks the whole
+// sheet in data-faz-css (the held text included) and neutralises the appended
+// URL in the live text. The marker pass used to read that live text after
+// consent to the held URL alone and write it back: the setter then dropped
+// data-faz-css, the only copy of the appended original, and a later consent
+// to the second provider had nothing to give back.
+console.log('\nruntime: a held sheet that took a blocked append keeps the appended original');
+for (const order of [['marketing', 'analytics'], ['analytics', 'marketing']]) {
+  const w = runtime({ second: true });
+  const el = write(w, SVG_CDATA + '<style id="held">@import url(https://tracker.test/b.css);.x{color:red}</style>', { attach: true });
+  const st = el.querySelector('#held');
+  safe(() => st.append('.y{background:url(https://other.test/c.png)}'));
+  const label = order.join(' then ');
+  ok(`${label}: precondition: the sheet is held and the appended URL parked`, !!st
+    && st.textContent.indexOf(HELD + 'https://tracker.test/b.css') !== -1
+    && st.textContent.indexOf('other.test') === -1
+    && !!st.getAttribute('data-faz-css'));
+  const store = { necessary: 'yes' };
+  w.fazcookie = w.fazcookie || {};
+  w.fazcookie._fazGetFromStore = (k) => store[k];
+  store[order[0]] = 'yes';
+  safe(() => w.eval('_fazUnblockServerSide()'));
+  ok(`${label}: after the first consent the other provider's URL is still not live`,
+    order[0] === 'marketing' ? st.textContent.indexOf('other.test') === -1 : st.textContent.indexOf(HELD + 'https://tracker.test/b.css') !== -1);
+  // Consent to the appended provider first gives its URL back at once; consent
+  // to the held one first must leave the appended original parked.
+  ok(`${label}: after the first consent the appended original is not lost`,
+    order[0] === 'marketing' ? !!st.getAttribute('data-faz-css') : st.textContent.indexOf('url(https://other.test/c.png)') !== -1);
+  store[order[1]] = 'yes';
+  safe(() => w.eval('_fazUnblockServerSide()'));
+  ok(`${label}: after both consents the whole sheet is back as written`,
+    st.textContent === '@import url(https://tracker.test/b.css);.x{color:red}.y{background:url(https://other.test/c.png)}');
+  ok(`${label}: after both consents nothing is parked`, !st.hasAttribute('data-faz-css'));
 }
 
 console.log('\nruntime: the option off leaves markup alone');
