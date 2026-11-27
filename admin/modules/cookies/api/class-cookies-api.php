@@ -577,7 +577,11 @@ class Cookies_API extends API_Controller {
 					'description'       => __( 'URL patterns for blocking purposes', 'faz-cookie-manager' ),
 					'type'              => 'string',
 					'context'           => array( 'view', 'edit' ),
-					'validate_callback' => array( __CLASS__, 'validate_url_pattern_field' ),
+					// rest_get_endpoint_args_for_schema() copies a custom
+					// callback only from arg_options.
+					'arg_options'       => array(
+						'validate_callback' => array( __CLASS__, 'validate_url_pattern_field' ),
+					),
 				),
 				'transfer'       => array(
 					'description'       => __( 'Third-country (Schrems II) personal-data transfer disclosure for this cookie.', 'faz-cookie-manager' ),
