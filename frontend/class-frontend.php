@@ -3511,6 +3511,14 @@ class Frontend {
 		// an inline script makes the page look like it loads the tag twice.
 		unset( $gcm_settings['google_tag_ids'] );
 
+		// GCM switched off, gcm.js loaded only for the built-in Google tag:
+		// nothing the admin stored on the GCM page applies, and no ruleset
+		// default either. The state starts fully denied and follows the
+		// banner's pre-consent state (Gcm_Settings::signals_only_payload()).
+		if ( $gcm->sends_signals_only() ) {
+			return $gcm->signals_only_payload( $gcm_settings );
+		}
+
 		// When the runtime geo-routing flag is on, override the Google Consent
 		// Mode default signals from the resolved ruleset's CMv2 block so the
 		// per-jurisdiction defaults (e.g. Quebec: ad_storage/analytics_storage

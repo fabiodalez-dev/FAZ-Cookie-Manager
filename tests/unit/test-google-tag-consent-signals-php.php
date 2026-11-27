@@ -131,6 +131,24 @@ namespace {
 	sig_ok( false === $only( array( 'status' => true ) ), 'GCM on: not signals-only' );
 	sig_ok( false === $only( array( 'status' => false ) ), 'GCM off, no tag: nothing is sent at all' );
 
+	// Settings saved while GCM was on must not come back with GCM off: the GCM
+	// page then says everything is denied by default.
+	echo "\nGcm_Settings::signals_only_payload()\n";
+	$granted_row = array( 'ad_storage' => 'granted', 'analytics_storage' => 'granted', 'ad_user_data' => 'granted', 'ad_personalization' => 'granted', 'regions' => 'US' );
+	$stored      = sig_settings( array( 'status' => false, 'google_tag_ids' => 'GT-ABCD1234', 'default_settings' => array( $granted_row ), 'url_passthrough' => true, 'ads_data_redaction' => true, 'gacm_enabled' => true, 'gacm_provider_ids' => '89,91', 'non_personalized_ads_fallback' => true, 'wait_for_update' => 2000 ) );
+	$payload     = method_exists( $stored, 'signals_only_payload' ) ? $stored->signals_only_payload( $stored->get() ) : array();
+	$rows        = isset( $payload['default_settings'] ) && is_array( $payload['default_settings'] ) ? $payload['default_settings'] : array();
+	sig_ok( 1 === count( $rows ) && 'All' === $rows[0]['regions'], 'a stored region row is replaced by the single default row' );
+	$denied = ! empty( $rows ) && 'denied' === $rows[0]['ad_storage'] && 'denied' === $rows[0]['analytics_storage'] && 'denied' === $rows[0]['ad_user_data'] && 'denied' === $rows[0]['ad_personalization'];
+	sig_ok( $denied, 'every ad and analytics signal starts denied' );
+	sig_ok( isset( $payload['url_passthrough'] ) && false === $payload['url_passthrough'], 'stored URL passthrough is dropped' );
+	sig_ok( isset( $payload['ads_data_redaction'] ) && false === $payload['ads_data_redaction'], 'stored ads data redaction is dropped' );
+	sig_ok( isset( $payload['gacm_enabled'] ) && false === $payload['gacm_enabled'] && '' === $payload['gacm_provider_ids'], 'stored Additional Consent is dropped' );
+	sig_ok( isset( $payload['non_personalized_ads_fallback'] ) && false === $payload['non_personalized_ads_fallback'], 'stored non-personalised-ads fallback is dropped' );
+	sig_ok( isset( $payload['wait_for_update'] ) && 500 === $payload['wait_for_update'], 'wait_for_update is the shipped default' );
+	$fe_src_payload = (string) file_get_contents( $root . '/frontend/class-frontend.php' );
+	sig_ok( 1 === preg_match( '/if \( \$gcm->sends_signals_only\(\) \) \{\s*return \$gcm->signals_only_payload\( \$gcm_settings \);\s*\}\s*\/\/ When the runtime geo-routing flag is on/', $fe_src_payload ), 'get_gcm_data() uses it in signals-only mode, before any ruleset override' );
+
 	echo "\nconfigured IDs never switch Advanced mode on\n";
 	$off = sig_settings( array( 'status' => false, 'advanced_mode' => true, 'advanced_mode_gtm' => true, 'google_tag_ids' => 'GT-ABCD1234, GTM-ABC123' ) );
 	sig_ok( false === $off->is_advanced_mode(), 'GCM off: Advanced mode stays off whatever the stored flag says' );

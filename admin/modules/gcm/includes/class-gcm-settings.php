@@ -335,6 +335,30 @@ class Gcm_Settings extends Store {
 	}
 
 	/**
+	 * The gcm.js payload for signals-only mode: the stored Consent Mode
+	 * settings replaced by the shipped defaults.
+	 *
+	 * With Google Consent Mode switched off the GCM page tells the admin that
+	 * everything is denied by default, but the stored settings survive the
+	 * switch: a region row set to "granted", URL passthrough, ads data
+	 * redaction, the non-personalised-ads fallback or Google Additional
+	 * Consent saved while GCM was on would silently take effect again as soon
+	 * as a built-in Google tag made the plugin load gcm.js. In this mode the
+	 * state follows the banner's own pre-consent state over a fully denied
+	 * default, so none of those choices may apply.
+	 *
+	 * @param array $settings Stored settings as returned by get().
+	 * @return array
+	 */
+	public function signals_only_payload( array $settings ) {
+		$defaults = $this->get_defaults();
+		foreach ( array( 'default_settings', 'wait_for_update', 'url_passthrough', 'ads_data_redaction', 'gacm_enabled', 'gacm_provider_ids', 'non_personalized_ads_fallback' ) as $key ) {
+			$settings[ $key ] = $defaults[ $key ];
+		}
+		return $settings;
+	}
+
+	/**
 	 * The built-in Google tag IDs (#366), validated.
 	 *
 	 * @return string[]
