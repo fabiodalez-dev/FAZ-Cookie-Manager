@@ -61,7 +61,7 @@ $dir = dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/contents/';
 $en  = json_decode( file_get_contents( $dir . 'en.json' ), true );
 
 // 1. The gap the report was about: a shipped catalogue for these languages.
-foreach ( array( 'ru', 'uk', 'hr' ) as $lang ) {
+foreach ( array( 'ru', 'uk', 'hr', 'tr' ) as $lang ) {
 	reset_cache();
 	$c = Banner::resolve_bundled_contents( $lang );
 	t( isset( $c['gdpr'], $c['ccpa'] ), "$lang: both laws resolve" );

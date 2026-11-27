@@ -3166,8 +3166,9 @@ class Admin {
 					$missing = array_merge( $missing, $gaps );
 				}
 				// No policy is visible only if every real shortcode is an
-				// incomplete POPIA policy, which the renderer refuses outright.
-				$hidden = $hidden && array() !== $gaps && 'popia-southafrica' === $jurisdiction;
+				// incomplete POPIA/KVKK policy, which the renderer refuses
+				// outright.
+				$hidden = $hidden && array() !== $gaps && in_array( $jurisdiction, array( 'popia-southafrica', 'turkey-kvkk' ), true );
 			}
 			if ( array() !== $missing ) {
 				$cache[] = array(

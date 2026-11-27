@@ -160,7 +160,7 @@ namespace {
 	faz_assert_same( $junk['onboarding']['completed'], true, 'onboarding.completed int 1 coerces to bool true' );
 	faz_assert_same( $junk['onboarding']['law'], '', "onboarding.law rejects a non-whitelisted value ('evil' -> '')" );
 
-	foreach ( array( 'gdpr', 'ccpa', 'both', '' ) as $valid_law ) {
+	foreach ( array( 'gdpr', 'ccpa', 'both', 'popia', 'kvkk', '' ) as $valid_law ) {
 		$ok = Settings::sanitize( array( 'onboarding' => array( 'law' => $valid_law ) ), $defaults );
 		faz_assert_same( $ok['onboarding']['law'], $valid_law, "onboarding.law accepts '" . ( '' === $valid_law ? '(empty)' : $valid_law ) . "'" );
 	}
@@ -209,6 +209,17 @@ namespace {
 	faz_assert_same( $popia['consentExpiry'], 180, 'popia -> conservative 180-day consent lifetime' );
 	faz_assert_same( $popia['noticeButtons'], true, 'popia -> equal-weight notice controls visible' );
 
+	// KVKK (Law 6698 + Kurum cookie guidance No. 69, Temmuz 2025) is opt-in:
+	// no cookie before explicit consent, equal-weight Accept/Reject, nothing
+	// pre-ticked. Same gdpr-shaped runtime controls; the wizard keeps
+	// law='kvkk' for re-entry and review.
+	$kvkk = Onboarding::map_law_to_banner_fields( 'kvkk' );
+	faz_assert_same( $kvkk['applicableLaw'], 'gdpr', 'kvkk opt-in preset -> stored as the gdpr-shaped model (runtime has no kvkk law id)' );
+	faz_assert_same( $kvkk['donotSell'], false, 'kvkk -> no US Do-Not-Sell surface' );
+	faz_assert_same( $kvkk['optoutPopup'], false, 'kvkk -> opt-out popup off' );
+	faz_assert_same( $kvkk['consentExpiry'], 180, 'kvkk -> 180-day consent lifetime' );
+	faz_assert_same( $kvkk['noticeButtons'], true, 'kvkk -> equal-weight notice controls visible' );
+
 	faz_assert_same( Onboarding::map_law_to_banner_fields( 'evil' ), null, 'unknown law -> null (no banner mutation)' );
 	faz_assert_same( Onboarding::map_law_to_banner_fields( '' ), null, "empty law -> null (no banner mutation)" );
 
@@ -217,17 +228,18 @@ namespace {
 	// The map must expose exactly the fields the wizard applies. Extra keys would
 	// expand its mutation surface; missing keys would leave stale values from the
 	// previous law (the CCPA-on-GDPR regression this suite guards).
-	foreach ( array( 'gdpr', 'ccpa', 'both', 'popia' ) as $law ) {
+	foreach ( array( 'gdpr', 'ccpa', 'both', 'popia', 'kvkk' ) as $law ) {
 		$fields = Onboarding::map_law_to_banner_fields( $law );
 		$keys   = array_keys( $fields );
 		sort( $keys );
 		faz_assert_same( $keys, array( 'applicableLaw', 'consentExpiry', 'donotSell', 'noticeButtons', 'optoutPopup' ), "map('$law') exposes the complete canonical law fields only" );
 	}
-	// gdpr/both/popia keep applicableLaw='gdpr', so the frontend's non-ccpa expiry
+	// gdpr/both/popia/kvkk keep applicableLaw='gdpr', so the frontend's non-ccpa expiry
 	// clamp (<=182 days) always applies to them.
 	faz_assert_same( $gdpr['applicableLaw'] !== 'ccpa', true, 'gdpr stays under the 182-day non-ccpa expiry clamp' );
 	faz_assert_same( $both['applicableLaw'] !== 'ccpa', true, 'both stays under the 182-day non-ccpa expiry clamp' );
 	faz_assert_same( $popia['applicableLaw'] !== 'ccpa', true, 'popia stays under the 182-day non-ccpa expiry clamp' );
+	faz_assert_same( $kvkk['applicableLaw'] !== 'ccpa', true, 'kvkk stays under the 182-day non-ccpa expiry clamp' );
 
 	echo "\n-- wizard v2: apply_options() allowlists and gates --\n";
 
@@ -360,7 +372,7 @@ namespace {
 	faz_assert_same( Onboarding::language_from_locale( 'zh_TW' ), 'zh-hant', 'site locale: Traditional Chinese maps to zh-hant' );
 
 	// Constants stay in sync with the surfaces they mirror.
-	faz_assert_same( Onboarding::REGIONS, array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch', 'za' ), 'REGIONS matches the Settings → Geolocation region list (za added with POPIA)' );
+	faz_assert_same( Onboarding::REGIONS, array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch', 'za', 'tr' ), 'REGIONS matches the Settings → Geolocation region list (za added with POPIA, tr with KVKK)' );
 	faz_assert_same( Onboarding::payment_gateway_keys(), array( 'paypal', 'stripe', 'square', 'braintree', 'klarna', 'mollie', 'amazon_pay' ), 'payment_gateway_keys falls back to the full catalogue standalone' );
 	faz_assert_same( in_array( 'status', Onboarding::BANNER_CONTROL_KEYS, true ), false, 'BANNER_CONTROL_KEYS never includes the master status switch' );
 

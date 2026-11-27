@@ -41,6 +41,7 @@ class Generator {
 		'ccpa-california',
 		'lgpd-brazil',
 		'popia-southafrica',
+		'turkey-kvkk',
 	);
 
 	/**
@@ -49,7 +50,7 @@ class Generator {
 	 *
 	 * @var string[]
 	 */
-	const LANGUAGES = array( 'en', 'it', 'fr', 'de', 'es', 'pt-BR', 'bg', 'cs', 'nl', 'hr' );
+	const LANGUAGES = array( 'en', 'it', 'fr', 'de', 'es', 'pt-BR', 'bg', 'cs', 'nl', 'hr', 'tr' );
 
 	/**
 	 * Canonicalise and validate a policy language code.
@@ -134,6 +135,8 @@ class Generator {
 	 *   - lgpd-brazil       → pt-BR
 	 *   - popia-southafrica → en (one of South Africa's official languages
 	 *                         and the language of the Act + Regulator guidance)
+	 *   - turkey-kvkk       → tr (the language of Law 6698 and of the
+	 *                         Kurum's cookie guidance)
 	 *
 	 * @var array<string,string>
 	 */
@@ -142,6 +145,7 @@ class Generator {
 		'ccpa-california'   => 'en',
 		'lgpd-brazil'       => 'pt-BR',
 		'popia-southafrica' => 'en',
+		'turkey-kvkk'       => 'tr',
 	);
 
 	/**
@@ -165,6 +169,13 @@ class Generator {
 	 * Information Officer and relies on the separate privacy notice
 	 * for recipient/safeguard detail, so those fields must not silently vanish
 	 * through Renderer::strip_empty_label_lines().
+	 *
+	 * KVKK (Law 6698, m.10) likewise requires the data controller's identity
+	 * and address in the aydınlatma (notice), before processing starts. A
+	 * published "Çerez Aydınlatma Metni" without name, address and contact
+	 * email is not an aydınlatma at all, so turkey-kvkk enforces the same
+	 * three-field floor (no DPO requirement — Turkish law does not mandate
+	 * one for everyone).
 	 *
 	 * @param string               $jurisdiction Effective jurisdiction id.
 	 * @param array                $settings     Cookie Policy settings.
@@ -197,6 +208,12 @@ class Generator {
 				'dpo.name'           => $dpo['name'] ?? '',
 				'dpo.email'          => $dpo['email'] ?? '',
 				'privacy_policy_url' => $settings['privacy_policy_url'] ?? '',
+			);
+		} elseif ( 'turkey-kvkk' === $jurisdiction ) {
+			$values = array(
+				'company.name'    => $company['name'] ?? '',
+				'company.address' => $company['address'] ?? '',
+				'company.email'   => $company['email'] ?? '',
 			);
 		}
 

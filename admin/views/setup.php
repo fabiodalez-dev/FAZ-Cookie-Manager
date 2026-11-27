@@ -140,6 +140,13 @@ $faz_setup_laws = array(
 		'expiry' => __( 'Consent is remembered for up to 180 days.', 'faz-cookie-manager' ),
 		'buttons' => __( 'Equal-weight Accept and Reject buttons are shown, with no pre-ticked categories.', 'faz-cookie-manager' ),
 	),
+	'kvkk' => array(
+		'title'  => __( 'KVKK (Türkiye)', 'faz-cookie-manager' ),
+		'desc'   => __( 'For visitors covered by Türkiye\'s Personal Data Protection Law No. 6698. This preset follows the opt-in model required by the KVKK cookie guidance (Temmuz 2025): non-essential cookies stay blocked until the visitor actively opts in, "Accept All" and "Reject All" carry equal weight, no categories are pre-ticked, and your consent choice is kept for up to 180 days. The aydınlatma and your explicit consent are collected separately, as Kurul Decision 2026/347 requires.', 'faz-cookie-manager' ),
+		'effect' => __( 'Consent-based preset: non-essential cookies stay blocked until consent.', 'faz-cookie-manager' ),
+		'expiry' => __( 'Consent is remembered for up to 180 days.', 'faz-cookie-manager' ),
+		'buttons' => __( 'Equal-weight Accept and Reject buttons are shown, with no pre-ticked categories.', 'faz-cookie-manager' ),
+	),
 );
 
 /**
@@ -190,6 +197,7 @@ $faz_setup_geo_regions = array(
 	'jp' => __( 'Japan', 'faz-cookie-manager' ),
 	'ch' => __( 'Switzerland', 'faz-cookie-manager' ),
 	'za' => __( 'South Africa', 'faz-cookie-manager' ),
+	'tr' => __( 'Türkiye', 'faz-cookie-manager' ),
 );
 $faz_wiz_geo_selected  = isset( $faz_wiz_geo['target_regions'] ) && is_array( $faz_wiz_geo['target_regions'] ) ? $faz_wiz_geo['target_regions'] : array( 'eu', 'uk' );
 
@@ -462,7 +470,7 @@ $faz_setup_step_titles = array(
 						<input type="checkbox" id="faz-setup-create-cookie-page">
 						<span class="faz-setup-toggle-body">
 							<span class="faz-setup-toggle-label"><?php esc_html_e( 'Create the cookie policy page when setup finishes', 'faz-cookie-manager' ); ?></span>
-							<span class="faz-setup-toggle-help"><?php esc_html_e( 'The page is created from the standard template in the selected language. It is published immediately, visible to visitors, only when the company details the selected law requires are already saved on the Cookie Policy page: the company name and privacy contact email, and for South Africa (POPIA) also the company address, the Information Officer\'s name and email and the privacy policy URL. Otherwise it is saved as a draft for you to complete and publish. An existing generated page in that language is reused and custom banner links are kept.', 'faz-cookie-manager' ); ?></span>
+							<span class="faz-setup-toggle-help"><?php esc_html_e( 'The page is created from the standard template in the selected language. It is published immediately, visible to visitors, only when the company details the selected law requires are already saved on the Cookie Policy page: the company name and privacy contact email, and for South Africa (POPIA) also the company address, the Information Officer\'s name and email and the privacy policy URL, and for Türkiye (KVKK) also the company postal address. Otherwise it is saved as a draft for you to complete and publish. An existing generated page in that language is reused and custom banner links are kept.', 'faz-cookie-manager' ); ?></span>
 						</span>
 					</label>
 					<p id="faz-setup-policy-unavailable" class="faz-setup-inline-note" hidden><?php esc_html_e( 'No cookie policy template ships in the selected language for this law, so the page cannot be created here. Write the policy on the Cookie Policy page instead.', 'faz-cookie-manager' ); ?></p>

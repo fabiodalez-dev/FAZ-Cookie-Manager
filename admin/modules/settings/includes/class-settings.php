@@ -725,8 +725,8 @@ class Settings extends Store {
 			case 'law':
 				// Chosen jurisdiction for the guided setup wizard. Whitelisted so
 				// a direct settings PUT cannot persist an arbitrary string; the
-				// banner-apply logic only ever reads one of these four values.
-				$allowed = array( '', 'gdpr', 'ccpa', 'both', 'popia' );
+				// banner-apply logic only ever reads one of these values.
+				$allowed = array( '', 'gdpr', 'ccpa', 'both', 'popia', 'kvkk' );
 				$value   = in_array( $value, $allowed, true ) ? $value : '';
 				break;
 			case 'withdrawal_path':
@@ -1040,7 +1040,7 @@ class Settings extends Store {
 				// Same finite vocabulary rendered by Settings and accepted by
 				// onboarding. Unknown tokens used to survive direct REST/import
 				// writes even though no runtime resolver could interpret them.
-				$allowed = array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch', 'za' );
+				$allowed = array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch', 'za', 'tr' );
 				$value   = array_values( array_unique( array_intersect( array_map( function ( $region ) {
 					if ( ! is_scalar( $region ) ) {
 						return '';

@@ -109,6 +109,7 @@ class Renderer {
 		'cs'    => 'provozovatel tohoto webu',
 		'nl'    => 'de beheerder van deze website',
 		'hr'    => 'voditelj ove web stranice',
+		'tr'    => 'bu web sitesinin işletmecisi',
 	);
 
 	/**
@@ -139,6 +140,7 @@ class Renderer {
 		'cs'    => 'Žádná deklarovaná.',
 		'nl'    => 'Geen opgegeven.',
 		'hr'    => 'Nije navedena.',
+		'tr'    => 'Beyan edilmedi.',
 	);
 
 	/**
@@ -157,6 +159,7 @@ class Renderer {
 		'cs'    => 'Žádné deklarované soubory cookie.',
 		'nl'    => 'Geen cookies opgegeven.',
 		'hr'    => 'Nema navedenih kolačića.',
+		'tr'    => 'Çerez beyan edilmedi.',
 	);
 
 	/**
@@ -165,7 +168,7 @@ class Renderer {
 	 *
 	 * @var string[]
 	 */
-	const CONSENT_RECORD_RETENTION_JURISDICTIONS = array( 'gdpr-strict', 'lgpd-brazil' );
+	const CONSENT_RECORD_RETENTION_JURISDICTIONS = array( 'gdpr-strict', 'lgpd-brazil', 'turkey-kvkk' );
 
 	/**
 	 * Object-cache key of the rendered cookie table for one document.
@@ -268,14 +271,14 @@ class Renderer {
 		//
 		// Since 1.34.2 the controller identity is required for every
 		// jurisdiction, but that gate belongs to PUBLISHING (REST save, wizard,
-		// policy page). At render time only POPIA refuses, as before: a
-		// GDPR/CCPA/LGPD page already live on an upgraded site keeps rendering
-		// for visitors, because blanking it would remove the cookie inventory
-		// and the withdrawal instructions on an automatic update. The
-		// administrator sees the actionable notice above the document.
+		// policy page). At render time only POPIA and KVKK refuse, as before:
+		// a GDPR/CCPA/LGPD page already live on an upgraded site keeps
+		// rendering for visitors, because blanking it would remove the cookie
+		// inventory and the withdrawal instructions on an automatic update.
+		// The administrator sees the actionable notice above the document.
 		$admin_notice = '';
 		if ( $doc->missing_required_settings( $jurisdiction, $settings ) ) {
-			if ( 'popia-southafrica' === $jurisdiction ) {
+			if ( in_array( $jurisdiction, array( 'popia-southafrica', 'turkey-kvkk' ), true ) ) {
 				return self::incomplete_configuration_notice();
 			}
 			$admin_notice = self::incomplete_configuration_notice( true );
@@ -1084,6 +1087,35 @@ class Renderer {
 				|| ! \FazCookie\Frontend\Frontend::is_declaration_suppressed( $name );
 		} ) );
 
+		// Canonical public order of the policy table: strictly necessary
+		// first, marketing near the end, uncategorized last. No installer ever
+		// writes a meaningful `category priority` value (every row defaults to
+		// 0), so raw ASC ordering produced whatever order the scanner happened
+		// to insert in. Rank by the known slugs instead; unknown/custom slugs
+		// sit between marketing and uncategorized.
+		$fazc_rank = static function ( $slug ) {
+			static $fazc_map = array(
+				'necessary'   => 10,
+				'functional'  => 20,
+				'analytics'   => 30,
+				'performance' => 40,
+				'marketing'   => 50,
+			);
+			$slug = is_string( $slug ) ? strtolower( trim( $slug ) ) : '';
+			if ( isset( $fazc_map[ $slug ] ) ) {
+				return $fazc_map[ $slug ];
+			}
+			return 'uncategorized' === $slug ? 90 : 75;
+		};
+		usort( $rows, static function ( $a, $b ) use ( $fazc_rank ) {
+			$ra = $fazc_rank( $a['category_slug'] ?? '' );
+			$rb = $fazc_rank( $b['category_slug'] ?? '' );
+			if ( $ra === $rb ) {
+				return strcasecmp( (string) ( $a['cookie_name'] ?? '' ), (string) ( $b['cookie_name'] ?? '' ) );
+			}
+			return $ra <=> $rb;
+		} );
+
 		self::$public_cookie_rows_cache = $rows;
 		return self::$public_cookie_rows_cache;
 	}
@@ -1228,6 +1260,8 @@ class Renderer {
 				return esc_html__( 'Some cookies listed above may transfer your personal data outside Brazil. Under Articles 33 to 36 of the LGPD, such transfers require a valid transfer mechanism (for example a destination country recognised by the ANPD as providing an adequate level of protection, standard contractual clauses approved by the ANPD, or your specific and highlighted consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
 			case 'popia-southafrica':
 				return esc_html__( 'Some cookies listed above may transfer your personal information outside South Africa. Under section 72 of POPIA, such transfers require a valid ground (for example a recipient bound by a law, binding corporate rules or a binding agreement that provides a substantially similar level of protection, or your consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
+			case 'turkey-kvkk':
+				return esc_html__( 'Some cookies listed above may transfer your personal data outside Türkiye. Under Article 9 of the KVKK (Law 6698, as amended in 2024), such transfers require a valid mechanism (an adequacy decision of the Board, the Standard Contracts announced by the Board — notified to the Board within five business days —, an undertaking authorised by the Board, or your explicit and free consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
 			default:
 				return esc_html__( 'Some cookies listed above may transfer your personal information to a country other than the one you are browsing from. The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
 		}
@@ -1260,6 +1294,10 @@ class Renderer {
 				return $sentence_case
 					? esc_html__( 'Transfers personal information outside South Africa', 'faz-cookie-manager' )
 					: esc_html__( 'transfers personal information outside South Africa', 'faz-cookie-manager' );
+			case 'turkey-kvkk':
+				return $sentence_case
+					? esc_html__( 'Transfers personal data outside Türkiye', 'faz-cookie-manager' )
+					: esc_html__( 'transfers personal data outside Türkiye', 'faz-cookie-manager' );
 			default:
 				return $sentence_case
 					? esc_html__( 'Transfers personal data to another country', 'faz-cookie-manager' )
@@ -1871,6 +1909,7 @@ class Renderer {
 				'cs'    => 'Tyto zásady používání cookies byly vygenerovány pluginem FAZ Cookie Manager na základě šablony pro jurisdikci %s. Šablony nepředstavují právní poradenství. Provozovatel tohoto webu zůstává správcem osobních údajů ve smyslu platných právních předpisů a odpovídá za správnost a přiměřenost zveřejněného obsahu. Pro informace specifické pro danou jurisdikci se obraťte na: %s.',
 				'nl'    => 'Dit cookiebeleid is gegenereerd door FAZ Cookie Manager op basis van een sjabloon voor het rechtsgebied %s. Sjablonen vormen geen juridisch advies. De beheerder van deze website blijft de verwerkingsverantwoordelijke in de zin van het toepasselijke recht en is verantwoordelijk voor de juistheid en toereikendheid van de gepubliceerde inhoud. Raadpleeg voor richtsnoeren die specifiek zijn voor het rechtsgebied: %s.',
 				'hr'    => 'Ova pravila o kolačićima generirao je FAZ Cookie Manager na temelju predloška za jurisdikciju %s. Predlošci ne predstavljaju pravni savjet. Administrator ove web stranice ostaje voditelj obrade osobnih podataka u skladu s mjerodavnim pravom i odgovoran je za točnost i primjerenost objavljenog sadržaja. Za smjernice specifične za jurisdikciju pogledajte: %s.',
+				'tr'    => 'Bu çerez politikası, FAZ Cookie Manager tarafından %s yetki alanı için bir şablon iskelet kullanılarak oluşturulmuştur. Şablonlar hukuki tavsiye niteliği taşımaz. Bu sitenin yöneticisi, geçerli yasa kapsamında veri sorumlusu olarak kalır ve yayımlanan içeriğin doğruluğundan ve yeterliliğinden sorumludur. Yetki alanına özgü rehberlik için başvurun: %s.',
 			);
 			$tpl = $texts[ $lang ] ?? $texts['en'];
 			$jurisdiction_label = self::jurisdiction_display_name( $jurisdiction, $lang );
@@ -2180,6 +2219,7 @@ class Renderer {
 			'nl'    => array( 'januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december' ),
 			// Genitive forms, for the same reason as Czech ("3. lipnja 2026.").
 			'hr'    => array( 'siječnja', 'veljače', 'ožujka', 'travnja', 'svibnja', 'lipnja', 'srpnja', 'kolovoza', 'rujna', 'listopada', 'studenoga', 'prosinca' ),
+			'tr'    => array( 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık' ),
 		);
 		return $names[ $lang ] ?? $names['en'];
 	}
@@ -2250,6 +2290,7 @@ class Renderer {
 			'cs'    => self::czech_month_label( $months ),
 			'nl'    => $one ? '%d maand' : '%d maanden',
 			'hr'    => self::croatian_month_label( $months ),
+			'tr'    => '%d ay', // Ay adları sayıyla değişmez.
 		);
 		return sprintf( $labels[ $lang ] ?? $labels['en'], $months );
 	}
@@ -2302,10 +2343,11 @@ class Renderer {
 	 */
 	private static function jurisdiction_display_name( $jurisdiction, $lang ) {
 		$names = array(
-			'gdpr-strict'       => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)', 'cs' => 'GDPR (EU/EHP/UK)', 'nl' => 'AVG (EU/EER/VK)', 'hr' => 'GDPR (EU/EGP/UK)' ),
-			'ccpa-california'   => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)', 'bg' => 'CCPA/CPRA (Калифорния)', 'cs' => 'CCPA/CPRA (Kalifornie)', 'nl' => 'CCPA/CPRA (Californië)', 'hr' => 'CCPA/CPRA (Kalifornija)' ),
-			'lgpd-brazil'       => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)', 'bg' => 'LGPD (Бразилия)', 'cs' => 'LGPD (Brazílie)', 'nl' => 'LGPD (Brazilië)', 'hr' => 'LGPD (Brazil)' ),
-			'popia-southafrica' => array( 'en' => 'POPIA (South Africa)', 'it' => 'POPIA (Sudafrica)', 'fr' => 'POPIA (Afrique du Sud)', 'de' => 'POPIA (Südafrika)', 'es' => 'POPIA (Sudáfrica)', 'pt-BR' => 'POPIA (África do Sul)', 'bg' => 'POPIA (Южна Африка)', 'cs' => 'POPIA (Jihoafrická republika)', 'nl' => 'POPIA (Zuid-Afrika)', 'hr' => 'POPIA (Južna Afrika)' ),
+			'gdpr-strict'       => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)', 'cs' => 'GDPR (EU/EHP/UK)', 'nl' => 'AVG (EU/EER/VK)', 'hr' => 'GDPR (EU/EGP/UK)', 'tr' => 'GDPR (AB/AEA/BK)' ),
+			'ccpa-california'   => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)', 'bg' => 'CCPA/CPRA (Калифорния)', 'cs' => 'CCPA/CPRA (Kalifornie)', 'nl' => 'CCPA/CPRA (Californië)', 'hr' => 'CCPA/CPRA (Kalifornija)', 'tr' => 'CCPA/CPRA (Kaliforniya)' ),
+			'lgpd-brazil'       => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)', 'bg' => 'LGPD (Бразилия)', 'cs' => 'LGPD (Brazílie)', 'nl' => 'LGPD (Brazilië)', 'hr' => 'LGPD (Brazil)', 'tr' => 'LGPD (Brezilya)' ),
+			'popia-southafrica' => array( 'en' => 'POPIA (South Africa)', 'it' => 'POPIA (Sudafrica)', 'fr' => 'POPIA (Afrique du Sud)', 'de' => 'POPIA (Südafrika)', 'es' => 'POPIA (Sudáfrica)', 'pt-BR' => 'POPIA (África do Sul)', 'bg' => 'POPIA (Южна Африка)', 'cs' => 'POPIA (Jihoafrická republika)', 'nl' => 'POPIA (Zuid-Afrika)', 'hr' => 'POPIA (Južna Afrika)', 'tr' => 'POPIA (Güney Afrika)' ),
+			'turkey-kvkk'       => array( 'en' => 'KVKK (Türkiye)', 'it' => 'KVKK (Turchia)', 'fr' => 'KVKK (Turquie)', 'de' => 'KVKK (Türkei)', 'es' => 'KVKK (Turquía)', 'pt-BR' => 'KVKK (Turquia)', 'bg' => 'KVKK (Турция)', 'cs' => 'KVKK (Turecko)', 'nl' => 'KVKK (Turkije)', 'hr' => 'KVKK (Turska)', 'tr' => 'KVKK (Türkiye)' ),
 		);
 		return $names[ $jurisdiction ][ $lang ] ?? $names[ $jurisdiction ]['en'] ?? $jurisdiction;
 	}
@@ -2330,6 +2372,7 @@ class Renderer {
 			'cs'    => 'Čeština',
 			'nl'    => 'Nederlands',
 			'hr'    => 'Hrvatski',
+			'tr'    => 'Türkçe',
 		);
 		return $names[ $lang ] ?? $lang;
 	}
@@ -2346,6 +2389,7 @@ class Renderer {
 			'ccpa-california'   => 'https://cppa.ca.gov/',
 			'lgpd-brazil'       => 'https://www.gov.br/anpd/pt-br',
 			'popia-southafrica' => 'https://inforegulator.org.za/',
+			'turkey-kvkk'       => 'https://www.kvkk.gov.tr/',
 		);
 		return $urls[ $jurisdiction ] ?? '';
 	}

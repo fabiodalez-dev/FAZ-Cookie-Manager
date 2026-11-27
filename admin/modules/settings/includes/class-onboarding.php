@@ -36,7 +36,7 @@ class Onboarding {
 	 *
 	 * @var string[]
 	 */
-	const LAWS = array( 'gdpr', 'ccpa', 'both', 'popia' );
+	const LAWS = array( 'gdpr', 'ccpa', 'both', 'popia', 'kvkk' );
 
 	/**
 	 * Geo-targeting region keys the wizard accepts — must stay in sync with the
@@ -44,7 +44,7 @@ class Onboarding {
 	 *
 	 * @var string[]
 	 */
-	const REGIONS = array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch', 'za' );
+	const REGIONS = array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch', 'za', 'tr' );
 
 	/**
 	 * The banner_control switches the wizard is allowed to write. A strict
@@ -78,6 +78,11 @@ class Onboarding {
 	 *           never downgraded to opt-out) WITH the US Do-Not-Sell entry point
 	 *           also rendered. This is the plugin's established "gdpr_ccpa"
 	 *           encoding (see Banner::apply_runtime_law_content_compatibility).
+	 *  - kvkk : KVKK (Law 6698, Türkiye). Opt-in model required by the Kurum
+	 *           cookie guidance (No: 69, Temmuz 2025): no cookie before
+	 *           explicit consent, equal-weight Accept/Reject, nothing
+	 *           pre-ticked. Same GDPR-shaped runtime controls; the wizard
+	 *           keeps law='kvkk' for re-entry and review.
 	 *
 	 * These fields are explicit because the wizard changes the existing default
 	 * GDPR row in place. Relying on the stored row's previous values would leave
@@ -121,6 +126,20 @@ class Onboarding {
 				// runtime has no dedicated 'popia' law id, so this consent-based
 				// preset uses the GDPR-shaped runtime controls while the wizard keeps
 				// law='popia' for re-entry and review.
+				return array(
+					'applicableLaw' => 'gdpr',
+					'donotSell'     => false,
+					'optoutPopup'   => false,
+					'consentExpiry' => 180,
+					'noticeButtons' => true,
+				);
+			case 'kvkk':
+				// KVKK (Law 6698) requires opt-in for non-essential cookies — no
+				// cookie before explicit consent, equal-weight accept/reject, no
+				// pre-ticked categories (Kurum Çerez Rehberi, No: 69, Temmuz 2025).
+				// The banner runtime has no dedicated 'kvkk' law id, so this
+				// consent-based preset uses the GDPR-shaped runtime controls
+				// while the wizard keeps law='kvkk' for re-entry and review.
 				return array(
 					'applicableLaw' => 'gdpr',
 					'donotSell'     => false,
@@ -179,6 +198,8 @@ class Onboarding {
 				$name = __( 'CCPA', 'faz-cookie-manager' );
 			} elseif ( 'popia' === $law ) {
 				$name = __( 'POPIA', 'faz-cookie-manager' );
+			} elseif ( 'kvkk' === $law ) {
+				$name = __( 'KVKK', 'faz-cookie-manager' );
 			} else {
 				$name = __( 'GDPR', 'faz-cookie-manager' );
 			}

@@ -191,7 +191,8 @@
 			gdpr: ['eu', 'uk'],
 			ccpa: ['us'],
 			both: ['eu', 'uk', 'us'],
-			popia: ['za']
+			popia: ['za'],
+			kvkk: ['tr']
 		};
 		var selected = regionsByLaw[law] || regionsByLaw.gdpr;
 		root.querySelectorAll('input[name="faz-setup-geo-region"]').forEach(function (input) {

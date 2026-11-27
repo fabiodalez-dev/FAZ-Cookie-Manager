@@ -734,6 +734,7 @@ defined( 'ABSPATH' ) || exit;
 						'jp' => __( 'Japan', 'faz-cookie-manager' ),
 						'ch' => __( 'Switzerland', 'faz-cookie-manager' ),
 						'za' => __( 'South Africa', 'faz-cookie-manager' ),
+						'tr' => __( 'Türkiye', 'faz-cookie-manager' ),
 					);
 					foreach ( $region_labels as $code => $label ) :
 					?>

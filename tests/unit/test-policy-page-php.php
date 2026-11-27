@@ -199,6 +199,15 @@ namespace {
 	$popia = Policy_Page::apply_to_setup( array( 'success' => true, 'warning' => '' ), 'en', 'popia' );
 	check( 'draft' === ( $popia['cookie_page']['status'] ?? '' ), 'controller gate (POPIA): name and email alone still park the page as a draft' );
 	check( false !== stripos( (string) $popia['warning'], 'Information Officer' ) && false !== stripos( (string) $popia['warning'], 'address' ) && false !== stripos( (string) $popia['warning'], 'privacy policy' ), 'controller gate (POPIA): the warning names the address, the Information Officer and the privacy policy URL it still needs' );
+	// KVKK (Law 6698, m.10) likewise parks on a longer floor than the two-field
+	// one: the aydınlatma needs the controller's postal address as well, and the
+	// warning must say so rather than re-ask for the name and email already set.
+	$GLOBALS['options'] = $GLOBALS['posts'] = $GLOBALS['post_meta'] = array();
+	$GLOBALS['policy_data'] = array( 'company' => array( 'name' => 'ACME', 'email' => 'privacy@acme.test' ) );
+	$GLOBALS['banner_store'] = array( 'en' => array( 'notice' => array( 'elements' => array( 'privacyLink' => '' ) ) ) );
+	$kvkk = Policy_Page::apply_to_setup( array( 'success' => true, 'warning' => '' ), 'tr', 'kvkk' );
+	check( 'draft' === ( $kvkk['cookie_page']['status'] ?? '' ), 'controller gate (KVKK): name and email alone still park the page as a draft' );
+	check( false !== stripos( (string) $kvkk['warning'], 'postal address' ) && false !== stripos( (string) $kvkk['warning'], '6698' ), 'controller gate (KVKK): the warning names the postal address and the law it comes from' );
 	$GLOBALS['policy_data'] = array();
 	$GLOBALS['options'] = $GLOBALS['posts'] = $GLOBALS['post_meta'] = array();
 	$GLOBALS['banner_store'] = array( 'it' => array( 'notice' => array( 'elements' => array( 'privacyLink' => '' ) ) ) );

@@ -1,10 +1,13 @@
 {
   "$schema": "../schemas/ruleset.schema.json",
   "id": "turkey-kvkk",
-  "version": "1.0.0",
-  "display_name": "KVKK — Turkey",
+  "version": "2.0.0",
+  "display_name": "KVKK — Türkiye",
   "law_references": [
-    "KVKK Law 6698/2016"
+    "KVKK Law 6698/2016, m.5(2) explicit consent, m.10 duty to inform, m.9 cross-border (amended 2024-03-06), m.11, m.12, m.13, m.14",
+    "KVKK Cookie Applications Guide (KVK Kurumu Yayın No: 69, Temmuz 2025)",
+    "KVK Kurumu Principle Decision 2026/347 (18.02.2026, Official Gazette 24.03.2026)",
+    "VKKK Communiqué on the Obligation to Inform, Seri No. 2018/10"
   ],
   "applies_to": {
     "countries": [
@@ -44,10 +47,18 @@
       "profiling": "denied"
     }
   },
-  "cross_border_notes": null,
+  "cross_border_notes": {
+    "cross_border_restrictions": "moderate",
+    "mechanisms": [
+      "adequacy decision of the KVK Board (m.9(1))",
+      "Standard Contracts announced by the Board, notified to the Board within five business days of signature (m.9(1,b), 2024 amendment)",
+      "written undertaking authorised by the Board (m.9(1,c), 2024 amendment)",
+      "explicit and free consent of the data subject (m.9(2), 2024 amendment) — lawful only when no other mechanism exists and the processing is exceptional"
+    ]
+  },
   "_meta": {
-    "behavior_review_date": "2026-05-20",
-    "next_review_due": "2027-05-20",
-    "notes": "Opt-in. KVK Kurumu; emend. 2024 cross-border."
+    "behavior_review_date": "2026-11-04",
+    "next_review_due": "2027-11-04",
+    "notes": "Opt-in. Layered notice + separate explicit consent, equal-weight Accept/Reject, no cookie wall (Guide No. 69, Temmuz 2025; Board Decision 2026/347). m.9 2024 amendment moved cross-border to Standard Contracts + 5-business-day notification."
   }
 }
