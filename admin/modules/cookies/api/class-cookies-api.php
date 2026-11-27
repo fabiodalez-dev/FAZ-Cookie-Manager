@@ -682,6 +682,22 @@ class Cookies_API extends API_Controller {
 			$editable_keys[] = $key;
 		}
 
+		// The route takes one `cookies` array, so the per-field arg_options of
+		// the item schema never run here: without this pass a too-broad
+		// url_pattern ("/", "js") was saved through bulk-update although the
+		// single-item routes refuse it and the frontend then ignores it. Every
+		// item is checked before the first save(), so a refused value leaves
+		// the whole batch unwritten instead of half of it.
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) || ! array_key_exists( 'url_pattern', $item ) || ! is_scalar( $item['url_pattern'] ) ) {
+				continue;
+			}
+			$valid = self::validate_url_pattern_field( $item['url_pattern'], $request, 'url_pattern' );
+			if ( is_wp_error( $valid ) ) {
+				return $valid;
+			}
+		}
+
 		$updated = array();
 		foreach ( $items as $item ) {
 			$id = isset( $item['id'] ) ? absint( $item['id'] ) : 0;
