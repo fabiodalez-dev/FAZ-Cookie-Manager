@@ -30,6 +30,10 @@
  *      signals in the same page view, and they stay denied: a later 'init' or
  *      a later event without a cookie grants nothing back. Such an event never
  *      grants anything on its own.
+ *   9. The 'init' state ends once a stored record is restored and the baseline
+ *      is put back after it: a later event without a cookie does not rebuild
+ *      the state from that old snapshot, and a new 'init' does not grant back
+ *      what the record denied.
  *
  * Run: node tests/unit/js/gcm-signals-only-preconsent.test.mjs
  */
@@ -87,6 +91,7 @@ function run({ signalsOnly = true, cookie = '', detail = null, readyBeforeLoad =
   }
   // A sequence of live events, each optionally preceded by a cookie write.
   for (const step of steps) {
+    if (step.clearCookie) window.document.cookie = 'fazcookie-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     if (step.cookie) window.document.cookie = `fazcookie-consent=${encodeURIComponent(step.cookie)}`;
     window.document.dispatchEvent(new window.CustomEvent(`fazcookie_consent_${step.event || 'update'}`, { detail: step.detail }));
   }
@@ -224,6 +229,28 @@ const OPT_OUT_INIT = { accepted: ALL, rejected: [], action: 'init' };
     { cookie: 'consentid:x,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,marketing:yes', detail: { accepted: ALL, rejected: [], action: 'all' } },
   ] });
   eq('a stored record after the withdrawal grants what it records', r.last && r.last.ad_storage, 'granted');
+}
+{
+  // The 'init' state stops being in force once a stored record is restored and
+  // then the baseline is put back. A later event without a cookie must not
+  // rebuild the state from that old snapshot and grant again what the record
+  // denied, and neither may a new 'init' on the same page view.
+  const DENIED_RECORD = 'consentid:x,consent:no,action:yes,necessary:yes,functional:yes,analytics:no,performance:no,marketing:no';
+  const base = [
+    { detail: OPT_OUT_INIT },
+    { cookie: DENIED_RECORD, detail: { accepted: ['necessary', 'functional'], rejected: ['analytics', 'performance', 'marketing'], action: 'custom' } },
+    { clearCookie: true, detail: { accepted: ['necessary'], rejected: ALL.slice(1), action: 'custom' } },
+  ];
+  const r = run({ steps: base.concat([
+    { detail: { accepted: ['necessary', 'analytics'], rejected: ['functional', 'performance', 'marketing'], action: 'custom' } },
+  ]) });
+  eq('precondition: the stored record denied analytics_storage', r.updates[1] && r.updates[1].analytics_storage, 'denied');
+  eq('precondition: the vanished record put the baseline back', r.updates[2] && r.updates[2].ad_storage, 'denied');
+  eq('after the baseline a cookieless accept grants nothing from the old init snapshot', r.updates.slice(2).some((u) => granted(u).length > 0), false);
+  eq('after the baseline analytics_storage stays denied', r.last && r.last.analytics_storage, 'denied');
+  const again = run({ steps: base.concat([{ detail: OPT_OUT_INIT }]) });
+  eq('after the baseline a new init does not grant back what the stored record denied', again.updates.slice(2).some((u) => u.analytics_storage === 'granted' || u.ad_storage === 'granted' || u.ad_user_data === 'granted' || u.ad_personalization === 'granted'), false);
+  eq('after the baseline a new init still follows the banner for a category the record granted', again.last && again.last.functionality_storage, 'granted');
 }
 {
   // GCM switched on is untouched: nothing was restored, nothing is pushed.
