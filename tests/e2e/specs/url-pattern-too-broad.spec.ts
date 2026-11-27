@@ -25,7 +25,7 @@ test.describe('Script URL pattern breadth', () => {
     };
 
     try {
-      for (const wide of ['/', 'js', '.js', 'www']) {
+      for (const wide of ['/', 'js', '.js', 'www', 'js%20%20']) {
         const refused = await fazApiPost<any>(page, nonce, 'cookies', { ...base, name: `${prefix}_${wide.length}`, url_pattern: wide });
         expect(refused.status, `pattern "${wide}" must be refused`).toBe(400);
         expect(JSON.stringify(refused.data)).toContain('faz_url_pattern_too_broad');

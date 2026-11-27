@@ -116,6 +116,17 @@ namespace {
 		return $thing instanceof WP_Error;
 	}
 	// The bulk route declares no per-field args, so WordPress answers true here.
+	if ( ! function_exists( 'sanitize_text_field' ) ) {
+		// The parts of WordPress's _sanitize_text_fields() that matter here:
+		// percent-encoded octets are removed, whitespace collapsed and trimmed.
+		function sanitize_text_field( $str ) {
+			$filtered = strip_tags( (string) $str );
+			while ( preg_match( '/%[a-f0-9]{2}/i', $filtered, $match ) ) {
+				$filtered = str_replace( $match[0], '', $filtered );
+			}
+			return trim( preg_replace( '/[\r\n\t ]+/', ' ', $filtered ) );
+		}
+	}
 	function rest_validate_request_arg( $value, $request, $param ) {
 		return true;
 	}
@@ -168,7 +179,10 @@ namespace {
 	$single = Cookies_API::validate_url_pattern_field( '/' );
 
 	echo "== A too-broad url_pattern is refused by bulk-update before anything is saved ==\n";
-	foreach ( array( '/', 'js', ' / ' ) as $wide ) {
+	// "js%20%20" is stored as "js" once sanitize_text_field() drops the octets.
+	bu_ok( is_wp_error( Cookies_API::validate_url_pattern_field( 'js%20%20' ) ), 'the single-item validator judges "js%20%20" as it is stored, "js"' );
+	bu_ok( true === Cookies_API::validate_url_pattern_field( 'cdn.example%2Fapp.js' ), 'a distinctive pattern with an escape still passes' );
+	foreach ( array( '/', 'js', ' / ', 'js%20%20' ) as $wide ) {
 		$r = bu_run( $api, array(
 			array( 'id' => 1, 'category' => 'analytics' ),
 			array( 'id' => 2, 'url_pattern' => 'widget.booking.example' ),

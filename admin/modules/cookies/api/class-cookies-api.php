@@ -1328,7 +1328,11 @@ class Cookies_API extends API_Controller {
 		if ( true !== $valid ) {
 			return $valid;
 		}
-		if ( Cookie::is_too_broad_url_pattern( $value ) ) {
+		// Judged as it will be stored: Cookie::set_url_pattern() runs
+		// sanitize_text_field(), which drops percent-encoded octets, so
+		// "js%20%20" passed a check on the raw value and was saved as "js",
+		// a pattern the frontend then ignores.
+		if ( Cookie::is_too_broad_url_pattern( sanitize_text_field( (string) $value ) ) ) {
 			return new WP_Error(
 				'faz_url_pattern_too_broad',
 				__( 'The script URL pattern is too short: it would match almost every script on the site. Use a distinctive part of the script\'s URL, such as the provider\'s domain, or leave it empty.', 'faz-cookie-manager' ),
